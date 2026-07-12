@@ -74,7 +74,7 @@ llmsim/
 | Type checking | `mypy --strict` **and** `pyright` strict | Both must pass; the public API is fully generic (`Event[T]`) |
 | Tests | `pytest` | Plus `hypothesis` for property-based invariants and `pytest-repeat` for concurrency soak runs |
 | Benchmarks | `pytest-benchmark` | Regression thresholds enforced in CI |
-| Docs | Sphinx or mkdocs-material (decide in Phase 0) | Must support the "Which parallelism do I need?" decision tree as the parallel docs landing page |
+| Docs | **mkdocs-material** (decided in Phase 0) | Hosts the "Which parallelism do I need?" decision tree as the parallel docs landing page; Python API reference will use an mkdocs-compatible plugin (e.g. mkdocstrings), not Sphinx/autodoc |
 
 ## CI matrix (from day one)
 

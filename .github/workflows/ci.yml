@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Quality gates across the full interpreter x OS matrix. The 3.14t rows carry
+  # the PYTHON_GIL=0/1 sub-axis; the 3.15 rows are a non-blocking canary
+  # (continue-on-error). Mark only the non-canary gate rows as required status
+  # checks in branch protection; the 3.15 canary must stay excluded.
+  gates:
+    name: gates (${{ matrix.python }}${{ matrix.gil && format(' GIL={0}', matrix.gil) || '' }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.python == '3.15' }}
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.14 and 3.15 run once per OS with the platform default GIL. 3.14t is
+        # defined purely via include rows so it always carries an explicit
+        # PYTHON_GIL=0/1 sub-axis (two runs per OS).
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.14", "3.15"]
+        gil: [""]
+        include:
+          - { os: ubuntu-latest, python: "3.14t", gil: "0" }
+          - { os: ubuntu-latest, python: "3.14t", gil: "1" }
+          - { os: macos-latest, python: "3.14t", gil: "0" }
+          - { os: macos-latest, python: "3.14t", gil: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install interpreter
+        run: uv python install "${{ matrix.python }}"
+      - name: Sync (frozen against committed uv.lock)
+        run: uv sync --frozen
+      - name: Run gates
+        run: |
+          if [ -n "${{ matrix.gil }}" ]; then
+            export PYTHON_GIL="${{ matrix.gil }}"
+          fi
+          uv run python -c "import sys; print('GIL enabled:', sys._is_gil_enabled())"
+          # Static gates use a configured python_version, so their result is
+          # independent of the runtime interpreter and its GIL. Run them once on
+          # the non-free-threaded rows; every row runs pytest.
+          if [ -z "${{ matrix.gil }}" ]; then
+            uv run ruff check
+            uv run ruff format --check
+            uv run mypy
+            uv run pyright
+          fi
+          uv run pytest
+
+  # Enforcing benchmark regression gate. KPI equality is enforced whenever a
+  # baseline exists (hardware-independent); timing auto-records on the first run
+  # for a machine class, then enforces within tolerance. Newly recorded
+  # baselines are uploaded so the missing machine class (e.g. Linux) can be
+  # committed. Runs on the pinned 3.14 so machine classes are OS-defined.
+  benchmarks:
+    name: benchmarks (3.14, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    env:
+      UV_PYTHON: "3.14"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install interpreter
+        run: uv python install 3.14
+      - name: Sync benchmark group (frozen)
+        run: uv sync --frozen --group bench
+      - name: Run benchmark harness (enforcing)
+        run: uv run pytest benchmarks/
+      - name: Upload recorded baselines
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baselines-${{ matrix.os }}
+          path: benchmarks/baselines/
+          if-no-files-found: warn
+
+  # Concurrency soak SCAFFOLD only. The real randomized, assertions-on soak
+  # arrives in Phase 3 (step 3.5); this job exists from day one so the 3.14t
+  # free-threaded soak slot is visible in CI. It runs a trivial no-op pass.
+  soak:
+    name: concurrency-soak-scaffold (3.14t, GIL=0)
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.14t"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install interpreter
+        run: uv python install 3.14t
+      - name: Sync (frozen)
+        run: uv sync --frozen
+      - name: Soak placeholder (no-op assertion pass)
+        run: |
+          export PYTHON_GIL=0
+          uv run python -c "import sys, llmsim; assert isinstance(llmsim.__all__, list); print('soak scaffold OK; GIL enabled:', sys._is_gil_enabled())"
+
+  # Verify the docs skeleton builds. Not a required gate for Phase 0 done, but
+  # keeps the mkdocs-material skeleton honest.
+  docs:
+    name: docs-build (3.14, ubuntu-latest)
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.14"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install interpreter
+        run: uv python install 3.14
+      - name: Sync docs group (frozen)
+        run: uv sync --frozen --group docs
+      - name: Build docs
+        run: uv run mkdocs build --strict

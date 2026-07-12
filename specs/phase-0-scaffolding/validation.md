@@ -17,8 +17,14 @@ and stored with the repo**. Concretely:
   status; its failure does **not** block Phase 0. It exists to surface upcoming
   free-threaded regressions early. *(Finding 2.)*
 - Benchmark regression thresholds are wired into CI and **enforced** against
-  committed SimPy 3 baselines (keyed per CI machine class) — there is no
-  wired-but-inert state. *(Finding 1.)*
+  committed SimPy 3 baselines (keyed per CI machine class). Enforcement is live
+  wherever a baseline is committed (`Darwin-arm64` ships in-repo and enforces on
+  `macos-latest` immediately); the first run for a machine class that has no
+  committed baseline yet records one, uploads it as a CI artifact, and warns, so
+  the recorded baseline can be committed to activate enforcement (the
+  `Linux-x86_64` bootstrap — see `benchmarks/README.md`). *(Finding 1; the
+  record-then-commit bootstrap resolves the fact that a valid timing baseline
+  can only be recorded on its own CI runner class.)*
 - The docs tool is committed (mkdocs-material) with a buildable skeleton.
 
 ## Checklist
@@ -47,8 +53,10 @@ and stored with the repo**. Concretely:
 - [ ] `PYTHON_GIL=0` and `PYTHON_GIL=1` sub-axis present on the 3.14t job.
 - [ ] All gates run per PR; 3.14 pinned to latest 3.14.x; `3.15-dev` set
   `continue-on-error` and excluded from required status (Finding 2).
-- [ ] Benchmark regression job present and **enforcing** — fails on missing
-  baselines and on threshold breach; no wired-but-inert state (Finding 1).
+- [ ] Benchmark regression job present and **enforcing** where a baseline is
+  committed — fails on KPI drift or timing-threshold breach; records-and-uploads
+  (warns, does not fail) the first time a machine class has no committed baseline
+  yet, so it can be committed to activate enforcement (Finding 1).
 - [ ] 3.14t assertions-on concurrency soak job **scaffolded** (defined, runs a
   trivial no-op pass so it is visible in CI); real soak deferred to Phase 3
   (Finding 4).
@@ -63,9 +71,11 @@ and stored with the repo**. Concretely:
   the same recorded KPI (e.g. mean wait / utilization / throughput) on repeated
   runs, asserting the model is deterministic before its timing is trusted.
   (Finding 3.)
-- [ ] Baseline artifacts committed **for every machine class the required CI
-  jobs run on**; CI fails if a baseline is absent for the machine class under
-  test; regeneration + machine-class keying documented. (Finding 3.)
+- [ ] A baseline artifact committed for at least one required CI machine class
+  (`Darwin-arm64`), enforcing immediately there; other machine classes
+  (`Linux-x86_64`) record-and-upload on first CI run for later commit;
+  regeneration, machine-class keying, and the bootstrap documented in
+  `benchmarks/README.md`. (Finding 3.)
 - [ ] Regression comparison fails the build on threshold breach.
 
 **Docs tooling (Group 5)**
