@@ -74,12 +74,13 @@ will be recorded only when measured on such a machine.
 
 ### CI gate
 
-CI cannot see many cores, so the enforced regression gate
-(`benchmarks/test_replication_scaling.py`) is a **per-core efficiency floor**
-at `min(4, cpu_count)` workers on the **process backend** — ≥0.40×/core, far
-under the measured 0.72–0.99×/core, so it trips on a genuine scaling
-regression (e.g. accidental serialization in the coordinator) rather than
-runner noise. The gate pins processes because the thread backend's 3.14t
+CI cannot see many cores — shared runners have ~2 *physical* cores behind
+their reported vCPUs — so the enforced regression gate
+(`benchmarks/test_replication_scaling.py`) runs **2 workers on the process
+backend** and requires **≥1.35× total speedup**: real scaling measures
+1.6–2.0× at 2 workers while an accidental coordinator serialization reads
+~1.0×, so the gate trips on a genuine regression rather than SMT or runner
+noise. The gate pins processes because the thread backend's 3.14t
 anti-scaling above is an interpreter-level regime, not an llmsim regression a
 gate could act on.
 

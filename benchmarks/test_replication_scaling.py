@@ -1,13 +1,11 @@
 """Enforcing parallel-efficiency gate for replication throughput.
 
-Standard CI runners have only a few cores, so the enforced gate is a
-per-core-efficiency floor at ``min(4, cpu_count)`` workers rather than the
-headline speedup, which is recorded from a many-core run in
-``docs/perf-notes.md`` (docs-honesty rule). The floor carries generous margin
-under the locally measured efficiencies (0.77x/core at 4 workers on a 10-core
-M5; Linux forkserver workers start cheaper than macOS spawn) so the gate
-catches a real scaling regression -- e.g. accidental serialization in the
-coordinator -- without flaking on runner noise.
+Standard CI runners have only ~2 *physical* cores (their reported vCPUs are
+SMT threads), so the enforced gate runs 2 workers -- genuine parallelism on
+every runner class -- and requires a total speedup that cleanly separates
+real scaling (measured 1.6-2.0x at 2 workers, processes) from an accidental
+coordinator serialization (which reads ~1.0x). The headline many-core curve
+is recorded in ``docs/perf-notes.md`` instead (docs-honesty rule).
 """
 
 import os
@@ -16,12 +14,14 @@ import pytest
 
 from benchmarks.replication_scaling import parallel_seconds, sequential_seconds
 
-# Enforced minimum per-core efficiency (speedup / workers) at GATE_WORKERS
-# workers. Measured locally: 0.72-0.77 at 4 workers (processes); the floor
-# sits far below so only a genuine regression trips it.
-EFFICIENCY_FLOOR = 0.40
+#: Workers used by the gate: 2-way parallelism exists on every CI runner
+#: class; higher counts oversubscribe hyperthreaded 2-core runners and turn
+#: the gate into an SMT lottery (observed: 1.58x at "4 workers" on 2 cores).
+GATE_WORKERS = 2
 
-GATE_WORKERS = min(4, os.process_cpu_count() or 1)
+#: Enforced minimum total speedup at GATE_WORKERS. Measured 1.87-1.98x
+#: locally and ~1.6x+ on CI runners; a serialization regression reads ~1.0x.
+MIN_SPEEDUP = 1.35
 
 # The gate pins the process backend -- the one whose scaling llmsim stands
 # behind on every build today. The thread backend currently anti-scales on
@@ -32,14 +32,13 @@ GATE_BACKEND = "processes"
 
 
 def test_parallel_efficiency_gate() -> None:
-    if GATE_WORKERS < 2:
+    if (os.process_cpu_count() or 1) < 2:
         pytest.skip("parallel-efficiency gate needs at least 2 cores")
     baseline = sequential_seconds()
     elapsed = parallel_seconds(GATE_WORKERS, backend=GATE_BACKEND)
     speedup = baseline / elapsed
-    floor = EFFICIENCY_FLOOR * GATE_WORKERS
-    assert speedup >= floor, (
+    assert speedup >= MIN_SPEEDUP, (
         f"replication throughput at {GATE_WORKERS} workers is {speedup:.2f}x "
-        f"sequential, below the {floor:.2f}x efficiency gate "
+        f"sequential, below the {MIN_SPEEDUP:.2f}x gate "
         f"(sequential {baseline:.2f}s, parallel {elapsed:.2f}s)"
     )
