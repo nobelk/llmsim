@@ -135,4 +135,4 @@ These are architecture-level rules, not preferences; violating them is a bug:
   `Py_mod_gil` concerns in llmsim itself).
 - Versioning: SemVer; 0.x during Phases 0–3, API freeze review before 1.0.
 - Docs published per release with scaling-curve benchmark artifacts.
-- License: MIT (matching the repository's existing LICENSE).
+- License: Apache License 2.0 (matching the repository's existing LICENSE file).
