@@ -96,11 +96,24 @@ files = ["src", "tests"]
 include = ["src"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
+# The sequential engine is one cohesive collaboration: the event loop, events,
+# processes, conditions, resources, and tracer deliberately share single-
+# underscore internals (``_ok``, ``_value``, ``_sim``, ``_trigger_put``,
+# ``_trace``) across modules, mirroring SimPy 3's friend-class design. A single
+# leading underscore here means "internal to the llmsim package", not
+# "private to this class"; exposing these as public API would both bloat the
+# typed surface and add accessor overhead on the hot path. mypy --strict still
+# guards the actual typing. Every other strict check stays on.
+reportPrivateUsage = false
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra"
+# ``importlib`` import mode lets the ported behavioral suite under
+# ``tests/behavioral/`` reuse SimPy 3's own test-file names (test_process.py,
+# test_resources.py, ...) without colliding with the unit tests of the same
+# basename directly under ``tests/``.
+addopts = "-ra --import-mode=importlib"
 # Make the top-level ``benchmarks`` package importable when running the
 # benchmark harness (``pytest benchmarks/``); ``llmsim`` itself is importable
 # via its editable install.
