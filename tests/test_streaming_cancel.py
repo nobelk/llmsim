@@ -60,12 +60,21 @@ def test_cancel_stops_further_dispatch_on_threads() -> None:
 
 def test_cooperative_factory_cancelled_mid_replication_on_threads() -> None:
     experiment = Experiment(support.cooperative_factory, [{}], master_seed=_MASTER)
-    timer = threading.Timer(0.02, experiment.cancel)
-    timer.start()
+    # Cancel only once the factory is verifiably mid-replication -- a
+    # wall-clock timer races lazy generator startup on slow runners and can
+    # fire before iter_results() even creates the shared token.
+    support.cooperative_started.clear()
+
+    def cancel_once_running() -> None:
+        assert support.cooperative_started.wait(timeout=30)
+        experiment.cancel()
+
+    canceller = threading.Thread(target=cancel_once_running)
+    canceller.start()
     results = list(
         experiment.iter_results(replications=1, backend="threads", max_workers=1)
     )
-    timer.cancel()
+    canceller.join()
     assert len(results) == 1
     # The factory consulted the token between step() calls and stopped long
     # before draining its 10_000 scheduled events.

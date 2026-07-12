@@ -7,6 +7,7 @@ import this module by name (``tests.parallel_support``); the repo root is on
 ``sys.path`` via pytest's ``pythonpath`` and propagates to spawned workers.
 """
 
+import threading
 import time
 from collections.abc import Generator
 from typing import Any
@@ -130,26 +131,33 @@ def store_throughput(stream: SeedStream, config: dict[str, float]) -> dict[str, 
     }
 
 
+#: Set by :func:`cooperative_factory` the moment it starts stepping, so a test
+#: can cancel strictly *mid-replication* instead of racing a wall-clock timer
+#: against lazy generator startup. Thread-backend only (shared memory).
+cooperative_started = threading.Event()
+
+
 def cooperative_factory(
     stream: SeedStream, config: Any, cancel: CancelToken
 ) -> dict[str, float]:
     """Consult the cancellation handle between ``step()`` calls.
 
     The cooperative-cancellation contract: a handle-aware factory checks the
-    token between steps and stops mid-replication when it fires.
+    token between steps and stops mid-replication when it fires. Signals
+    :data:`cooperative_started` once stepping begins and paces each step so
+    the run comfortably outlives any cancel latency on a slow runner.
     """
     sim = Sim(rng=stream.rng())
     for _ in range(10_000):
         sim.delay(1.0)
     steps = 0
+    cooperative_started.set()
     while sim.peek() != float("inf"):
         if cancel.cancelled:
             break
         sim.step()
         steps += 1
-        if steps == 5:
-            # Give the coordinator a window to cancel mid-replication.
-            time.sleep(0.05)
+        time.sleep(0.0005)  # ~5s uncancelled worst case; ~ms cancel response
     return {"steps": float(steps), "cancelled": float(cancel.cancelled)}
 
 
