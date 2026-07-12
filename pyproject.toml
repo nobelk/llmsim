@@ -1,0 +1,107 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llmsim"
+version = "0.0.0"
+description = "Parallel discrete-event simulation for Python 3.14+"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "llmsim contributors" }]
+keywords = [
+    "discrete-event-simulation",
+    "des",
+    "simulation",
+    "parallel",
+    "free-threading",
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+# The runtime engine is stdlib-only by design: zero required dependencies.
+# numpy and anthropic ship as optional extras alongside their adapters in
+# later phases (numpy -> Phase 2, llm -> Phase 6), never here.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/nobelk/llmsim"
+Repository = "https://github.com/nobelk/llmsim"
+Documentation = "https://github.com/nobelk/llmsim/tree/main/docs"
+
+# Development toolchains use PEP 735 dependency groups rather than optional
+# extras, so none of them appear in the published wheel's metadata and
+# `pip install llmsim` stays dependency-free.
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "pyright>=1.1.390",
+    "pytest>=8.3",
+    "pre-commit>=4.0",
+    "hypothesis>=6.100",
+    "pytest-repeat>=0.9",
+]
+bench = [
+    "pytest-benchmark>=5.0",
+    "simpy>=3.0.11,<4",
+    # SimPy 3 reads its version through the legacy ``pkg_resources`` API, which
+    # Python 3.14 no longer ships by default. setuptools restores it, but only
+    # versions before 81 still bundle ``pkg_resources``. Benchmark scope only --
+    # never a runtime dependency.
+    "setuptools>=75,<81",
+]
+docs = [
+    "mkdocs-material>=9.5",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llmsim"]
+
+[tool.ruff]
+src = ["src", "tests", "benchmarks"]
+line-length = 88
+
+[tool.ruff.lint]
+# PEP 8 (pycodestyle E/W + pep8-naming N), pyflakes (F), import order (I),
+# and PEP 257 docstrings (D).
+select = ["E", "W", "F", "I", "N", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and benchmarks need not be documented to PEP 257.
+"tests/**" = ["D"]
+"benchmarks/**" = ["D"]
+
+# ``benchmarks/`` is linted by ruff but deliberately outside the strict type
+# surface: its models are dev-only SimPy 3 reference programs, and SimPy 3 ships
+# no type information, so strict checking would only flag its untyped imports.
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["src", "tests"]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra"
+# Make the top-level ``benchmarks`` package importable when running the
+# benchmark harness (``pytest benchmarks/``); ``llmsim`` itself is importable
+# via its editable install.
+pythonpath = ["."]

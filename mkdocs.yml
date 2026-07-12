@@ -1,0 +1,30 @@
+site_name: llmsim
+site_description: Parallel discrete-event simulation for Python 3.14+
+repo_url: https://github.com/nobelk/llmsim
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Which parallelism do I need?: parallelism-decision-tree.md
+  - Design:
+      - Design document: part-deux.md
+      - SimPy 3 comparison: simpy-comparison.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences

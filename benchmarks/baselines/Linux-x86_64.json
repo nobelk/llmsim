@@ -1,0 +1,27 @@
+{
+  "machine_class": "Linux-x86_64",
+  "models": {
+    "grid_conveyor": {
+      "kpi": {
+        "items_delivered": 40.0,
+        "mean_transit": 199.212929
+      },
+      "seconds": 0.07186073024999946
+    },
+    "machine_shop": {
+      "kpi": {
+        "parts_made": 3612.0,
+        "parts_per_machine": 361.2
+      },
+      "seconds": 0.00676219458571349
+    },
+    "mm1_queue": {
+      "kpi": {
+        "mean_wait": 11.933652,
+        "num_served": 2000.0,
+        "utilization": 0.908566
+      },
+      "seconds": 0.015899849758063793
+    }
+  }
+}

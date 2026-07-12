@@ -131,4 +131,4 @@ Discrete-event simulation and PDES literature underpinning the design:
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)

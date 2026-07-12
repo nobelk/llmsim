@@ -13,7 +13,7 @@ benchmarks enforced from day one.
 
 - [ ] **0.1 Package skeleton** — `pyproject.toml` (PEP 621, hatchling,
   `requires-python = ">=3.14"`), `src/llmsim/` layout with empty modules per
-  the package map, MIT metadata, README stub.
+  the package map, Apache-2.0 metadata, README stub.
 - [ ] **0.2 Quality gates** — ruff (lint + format, enforcing PEP 8 per the
   tech stack), mypy strict, pyright
   strict, pytest wiring; pre-commit config; a trivial smoke test proving the
