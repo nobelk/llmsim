@@ -1,8 +1,61 @@
 """llmsim: parallel discrete-event simulation for Python 3.14+.
 
 This module is the public API surface. Symbols are re-exported here as each
-engine capability lands in its roadmap phase; during Phase 0 (scaffolding) the
-package is an importable skeleton with no public symbols yet.
+engine capability lands in its roadmap phase. Phase 1 exposes the sequential
+core: the :class:`Sim` event loop, the generic :class:`Event`, generator and
+coroutine :class:`Process` support, condition composition, and the resource,
+container, and store primitives.
+
+A minimal simulation::
+
+    import llmsim
+
+    def customer(sim, bank, service_time):
+        arrive = sim.now
+        with bank.request() as slot:
+            yield slot
+            wait = sim.now - arrive
+            yield sim.delay(service_time)
+
+    sim = llmsim.Sim(seed=0)
+    bank = llmsim.Resource(sim, capacity=2)
+    sim.spawn(customer, bank, service_time=5.0)
+    sim.run(until=100.0)
 """
 
-__all__: list[str] = []
+from llmsim.core.conditions import AllOf, AnyOf, Condition
+from llmsim.core.errors import EmptySchedule, Interrupt, SimulationError
+from llmsim.core.events import Event, Timeout
+from llmsim.core.process import Process
+from llmsim.core.sim import Sim
+from llmsim.resources.container import Container
+from llmsim.resources.resource import (
+    PreemptiveResource,
+    PriorityResource,
+    Resource,
+)
+from llmsim.resources.store import FilterStore, PriorityStore, Store
+
+__all__ = [
+    # Core engine.
+    "Sim",
+    "Event",
+    "Timeout",
+    "Process",
+    # Errors.
+    "Interrupt",
+    "SimulationError",
+    "EmptySchedule",
+    # Condition composition.
+    "Condition",
+    "AllOf",
+    "AnyOf",
+    # Resources.
+    "Resource",
+    "PriorityResource",
+    "PreemptiveResource",
+    "Container",
+    "Store",
+    "PriorityStore",
+    "FilterStore",
+]
