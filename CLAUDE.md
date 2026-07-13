@@ -2,12 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project status: planning — no code yet
+## Project status
 
 llmsim is a parallel discrete-event simulation (DES) library for Python 3.14+.
-The design and roadmap are complete; **implementation has not started**. There
-is no `pyproject.toml`, `src/`, or test suite yet — Phase 0 (scaffolding) is
-the first roadmap step.
+Implementation is underway — see `specs/roadmap.md` for current phase status.
 
 Document hierarchy (upstream → downstream):
 
@@ -30,15 +28,11 @@ decisions must be made in `specs/`, not just in code or README.
   every step introducing a parallel capability documents its slowdown regimes
   in the same PR.
 
-## Commands (per specs/tech-stack.md; tooling lands in Phase 0)
+## Commands (per specs/tech-stack.md)
 
-`uv` is the standard package manager for all dev workflows:
+`uv` is the standard package manager for all dev workflows (`uv run pytest`,
+`uv run ruff check`, etc. — see `pyproject.toml`). Non-obvious rules:
 
-- Environment: `uv venv`, `uv sync` (committed `uv.lock`); interpreters via
-  `uv python install 3.14` / `3.14t` (free-threaded).
-- Tests: `uv run pytest` (single test: `uv run pytest tests/test_x.py::test_name`).
-- Lint/format: `uv run ruff check` and `uv run ruff format` — ruff is the only
-  lint/format tool; PEP 8 enforced (pycodestyle `E`/`W` + pep8-naming `N`).
 - Types: `uv run mypy --strict` **and** `uv run pyright` — both must pass.
 - Benchmarks: pytest-benchmark with regression thresholds enforced in CI.
 - Build backend is hatchling (PEP 621, pyproject-only, `src/` layout); end
@@ -63,20 +57,12 @@ decisions must be made in `specs/`, not just in code or README.
 
 One fully typed, `__slots__`-based sequential core (SimPy-style
 generator-as-process model), plus parallelism from **share-nothing
-architecture** — never from locks on the sequential engine:
-
-- `core/` — `Sim` = heapq event loop ordered by `(time, priority, eid)`;
-  one driver runs both generator and `async def` processes.
-- `parallel/replicate.py` — the flagship: N independent replications across
-  cores, results keyed by `(config, replication)`, never completion order.
-- `parallel/pdes/` — conservative (YAWNS-style barrier safe-window) sharding
-  of one model; optimistic/Time Warp is permanently rejected (generator frames
-  can't be snapshotted).
-- `parallel/backends.py` — one abstraction over `ThreadPoolExecutor`
-  (free-threaded 3.14t), `InterpreterPoolExecutor` (GIL builds), and
-  `ProcessPoolExecutor`; work is submitted as (importable callable, seed spec,
-  config) — never live objects — so all three share one code path.
-- `rand/` — master-seed tree → independent per-(config, replication) streams.
+architecture** — never from locks on the sequential engine. Module layout and
+per-module roles are in the code and `specs/tech-stack.md`; the design
+decision that isn't obvious from reading it: optimistic/Time Warp
+synchronization is permanently rejected (generator frames can't be
+snapshotted), and executor work is always submitted as (importable callable,
+seed spec, config) — never live objects — so all backends share one code path.
 
 ## Non-negotiable design rules
 
