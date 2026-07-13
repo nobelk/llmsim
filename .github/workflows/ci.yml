@@ -95,11 +95,12 @@ jobs:
           path: benchmarks/baselines/
           if-no-files-found: warn
 
-  # Concurrency soak SCAFFOLD only. The real randomized, assertions-on soak
-  # arrives in Phase 3 (step 3.5); this job exists from day one so the 3.14t
-  # free-threaded soak slot is visible in CI. It runs a trivial no-op pass.
+  # Concurrency soak (Phase 3.5): repeated PDES equivalence runs on the
+  # free-threaded build with randomized barrier jitter and the debug-mode
+  # ownership assertions on. The repeat count is the wall-clock budget knob
+  # (~25 x a sub-second module keeps the job under a couple of minutes).
   soak:
-    name: concurrency-soak-scaffold (3.14t, GIL=0)
+    name: concurrency-soak (3.14t, GIL=0, jittered)
     runs-on: ubuntu-latest
     env:
       UV_PYTHON: "3.14t"
@@ -113,10 +114,12 @@ jobs:
         run: uv python install 3.14t
       - name: Sync (frozen)
         run: uv sync --frozen
-      - name: Soak placeholder (no-op assertion pass)
+      - name: Soak (randomized barrier jitter, assertions on)
         run: |
           export PYTHON_GIL=0
-          uv run python -c "import sys, llmsim; assert isinstance(llmsim.__all__, list); print('soak scaffold OK; GIL enabled:', sys._is_gil_enabled())"
+          export LLMSIM_DEBUG=1
+          uv run python -c "import sys; assert not sys._is_gil_enabled()"
+          uv run pytest tests/test_pdes_soak.py --count=25 -x -q
 
   # Verify the docs skeleton builds. Not a required gate for Phase 0 done, but
   # keeps the mkdocs-material skeleton honest.

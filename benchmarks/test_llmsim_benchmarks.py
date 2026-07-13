@@ -14,13 +14,12 @@ canonical models this asserts:
   the parity regime are documented in ``docs/perf-notes.md`` (docs-honesty rule).
 """
 
-import os
-import sys
 import time
 from collections.abc import Callable
 
 import pytest
 
+from benchmarks import skip_if_shared_macos_ci
 from benchmarks.llmsim_models import LLMSIM_MODELS
 from benchmarks.models import MODELS as SIMPY_MODELS
 
@@ -81,13 +80,7 @@ def test_llmsim_is_deterministic(name: str) -> None:
 @pytest.mark.parametrize("name", sorted(EXPECTED_MODELS))
 def test_llmsim_speedup_vs_simpy(name: str) -> None:
     """llmsim clears its per-model speedup threshold against SimPy 3."""
-    if sys.platform == "darwin" and os.environ.get("CI"):
-        # Shared macOS runners show ~20% spread on best-of-15 timings (same
-        # commit measured 0.79-0.89x on code that benches 1.0-1.03x locally
-        # and on ubuntu runners), so a per-run timing ratio carries no signal
-        # there. KPI-equality and determinism still run on every platform;
-        # the timing floor is enforced on Linux CI and local machines.
-        pytest.skip("timing ratio not measurable on shared macOS runners")
+    skip_if_shared_macos_ci()
     simpy_seconds = _best_seconds(SIMPY_MODELS[name])
     llmsim_seconds = _best_seconds(LLMSIM_MODELS[name])
     speedup = simpy_seconds / llmsim_seconds
