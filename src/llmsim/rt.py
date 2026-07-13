@@ -48,6 +48,12 @@ class RealtimeDriftError(SimulationError):
     more than one ``factor`` unit of slack. Carries the event's simulated
     time and the measured drift in wall-clock seconds; drift is surfaced,
     never silently absorbed (docs-honesty rule).
+
+    Drift is always measured against the *next* event's deadline (SimPy 3's
+    rule): an overrun inside the final event's callbacks ends the run late
+    but raises nothing (there is no schedule left to fall behind), and wall
+    time spent draining non-strict offloads after the schedule empties is
+    exempt -- non-strict delivery is wall-clock-driven by its own contract.
     """
 
     def __init__(self, simulated_time: float, drift: float) -> None:
@@ -127,8 +133,14 @@ def run(
                 sim.step()
             except EmptySchedule:
                 # Same run-end rule as Sim.run: outstanding non-strict
-                # offloads deliver before any EmptySchedule outcome.
+                # offloads deliver before any EmptySchedule outcome. The
+                # wall time spent waiting is not drift -- the schedule was
+                # empty, so no deadline was missed -- and non-strict
+                # delivery is wall-clock-driven by its own contract, so the
+                # pacing origin resynchronizes here.
                 if offload is not None and offload.drain():
+                    origin = sim.now
+                    start_wall = _monotonic()
                     continue
                 raise
             if offload is not None:

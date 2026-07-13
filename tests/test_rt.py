@@ -319,6 +319,41 @@ class TestEquivalence:
         assert tracer_paced.records == tracer_plain.records
 
 
+class TestDrainDriftExemption:
+    """Waiting for non-strict payloads at run end is never drift."""
+
+    def test_run_end_drain_never_raises_drift(self) -> None:
+        """The drain wait exceeds the slack by far; strict must not raise."""
+        sim = Sim()
+        seen: list[float] = []
+
+        def waiter(sim: Sim) -> Gen:
+            value = yield sim.offload(offload_slow_square, 3.0, 0.2, strict=False)
+            seen.append(value)
+
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            sim.spawn(waiter)
+            rt.run(sim, factor=0.01)  # strict=True default
+        assert seen == [9.0]
+
+    def test_pacing_resynchronizes_after_drain(self, clock: FakeClock) -> None:
+        """Events scheduled after a drained delivery pace from the resync."""
+        sim = Sim()
+        seen: list[tuple[float, float]] = []
+
+        def waiter(sim: Sim) -> Gen:
+            value = yield sim.offload(offload_square, 3.0, strict=False)
+            yield sim.delay(2.0)
+            seen.append((sim.now, value))
+
+        with OffloadPool(sim, backend="inline"):
+            sim.spawn(waiter)
+            rt.run(sim, factor=1.0)
+        # Delivery at t=0 after the drain; the follow-up delay paces two
+        # wall seconds from the resynchronized origin.
+        assert seen == [(2.0, 9.0)]
+
+
 class TestOffloadSynergy:
     """HIL showcase: payloads compute inside their slot's real-time budget."""
 
