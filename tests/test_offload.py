@@ -485,6 +485,62 @@ class TestPooledCancellation:
         pool.close()  # running payload finishes; its result is discarded
         assert pool._closed
 
+    def test_cancel_of_pending_non_strict_never_strands_the_waiter(self) -> None:
+        """A cancelled non-strict offload resumes its waiter with None."""
+        sim = Sim()
+        seen: list[tuple[float, Any]] = []
+        submitted: list[OffloadEvent[Any]] = []
+
+        def waiter(sim: Sim) -> Gen:
+            event = sim.offload(offload_blocking, 3.0, strict=False)
+            assert isinstance(event, OffloadEvent)
+            submitted.append(event)
+            value = yield event
+            seen.append((sim.now, value))
+
+        def canceller(sim: Sim) -> Gen:
+            yield sim.delay(1.0)
+            submitted[0].cancel()
+
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            sim.spawn(waiter)
+            sim.spawn(canceller)
+            sim.run()  # must terminate: the waiter resumes, never strands
+            offload_release.set()
+        assert seen == [(1.0, None)]
+
+    def test_cancel_after_early_completion_discards_the_result(self) -> None:
+        """A delayed non-strict result that finished early is still cancellable."""
+        sim = Sim()
+        seen: list[tuple[float, Any]] = []
+        submitted: list[OffloadEvent[Any]] = []
+
+        def waiter(sim: Sim) -> Gen:
+            event = sim.offload(offload_square, 4.0, delay=50.0, strict=False)
+            assert isinstance(event, OffloadEvent)
+            submitted.append(event)
+            value = yield event
+            seen.append((sim.now, value))
+
+        def canceller(sim: Sim) -> Gen:
+            # By t=10 the (inline, pre-completed) future has been delivered
+            # into the schedule for t=50; cancel must still discard it.
+            yield sim.delay(10.0)
+            submitted[0].cancel()
+
+        def ticker(sim: Sim) -> Gen:
+            for _ in range(60):
+                yield sim.delay(1.0)
+
+        with OffloadPool(sim, backend="inline"):
+            sim.spawn(waiter)
+            sim.spawn(canceller)
+            sim.spawn(ticker)
+            sim.run()
+        # The result (16.0) was computed and even scheduled -- but cancelled
+        # at t=10, so the slot delivers the discarded outcome instead.
+        assert seen == [(50.0, None)]
+
 
 class TestRunUntil:
     """Offload events compose with ``run(until=...)`` like any event."""

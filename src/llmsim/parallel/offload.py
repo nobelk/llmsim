@@ -140,18 +140,37 @@ class OffloadEvent(Event[T]):
     def cancel(self) -> None:
         """Abandon the offload: its result or exception is never delivered.
 
-        Idempotent. Cancels the pending future when the payload has not
-        started; a running or finished payload's outcome is discarded. A
-        strict event still processes at its slot (delivering ``None`` and
-        never blocking); a non-strict event is simply forgotten.
+        Idempotent; a no-op once the event has processed. Cancels the pending
+        future when the payload has not started; a running or finished
+        payload's outcome is discarded. The event still processes as a
+        discarded outcome (``None``) -- at its slot in strict mode, at
+        ``max(now, now + delay)`` otherwise -- so a process waiting on a
+        cancelled offload resumes with ``None`` rather than stranding.
         """
-        if self._abandoned:
+        if self._abandoned or self.callbacks is None:
             return
         self._abandoned = True
         # A discarded failure must never crash the run.
         self.defused = True
         self._future.cancel()
         self._pool._forget(self)
+        if self._strict:
+            # The slot event is already in the heap; _resolve delivers the
+            # discarded outcome there.
+            return
+        if self._value is PENDING:
+            # Undelivered: schedule the discarded outcome ourselves so the
+            # waiter is never stranded (the pool has forgotten this event).
+            self._ok = True
+            sim = self._sim
+            self._value = None
+            sim.schedule(self, NORMAL, max(0.0, self._earliest - sim.now))
+        else:
+            # Delivered into the schedule but not yet processed (the future
+            # finished before the lower bound): discard the stored outcome
+            # in place -- the queued event now delivers None.
+            self._ok = True
+            self._value = None
 
     def _waiter_unhooked(self) -> None:
         """Abandon the offload once no real waiter remains (interrupt path)."""
