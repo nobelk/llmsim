@@ -117,6 +117,39 @@ Interrupting a process that waits on an offload abandons the computation
 (pending work is cancelled; a finished result is discarded, never
 delivered), and `OffloadEvent.cancel()` does the same explicitly.
 
+## Real-time mode (hardware-in-the-loop)
+
+`llmsim.rt.run` paces any ordinary `Sim` against the wall clock — a driver
+function, not a different engine, so the model is unchanged and a paced run
+of a deterministic model produces the **same trace** as `sim.run()`:
+
+```python
+from llmsim import OffloadPool, Sim, rt
+
+sim = Sim(seed=7)
+pool = OffloadPool(sim, backend="threads")   # optional: the HIL synergy
+...
+rt.run(sim, factor=0.5)   # one simulated time unit = 0.5 real seconds
+pool.close()
+```
+
+The contract:
+
+- **`factor`** is real seconds per simulated time unit; an event at
+  simulated `T` processes no earlier than `start + (T - t0) * factor` on
+  `time.monotonic()`.
+- **Drift**: if processing falls behind by more than one `factor` of slack,
+  `strict=True` (default) raises `RealtimeDriftError` with the simulated
+  time and measured drift; `strict=False` hurries (no sleeping) until the
+  schedule catches up. Events are never skipped in either mode.
+- **Offload synergy**: a strict offload's completion slot becomes a real
+  deadline, and the payload computes *during* the pacing sleep — a scoring
+  policy with a 0.2 s slot budget and a 50 ms payload costs zero drift.
+  Non-strict offloads deliver between paced steps, exactly as under
+  `sim.run()`.
+- Drift regimes (event-density floor, overlong payloads) are measured in
+  [Performance notes](perf-notes.md).
+
 ## The 80% case
 
 ```python

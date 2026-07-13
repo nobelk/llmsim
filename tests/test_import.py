@@ -55,12 +55,14 @@ PHASE_3_PUBLIC_API = frozenset(
     }
 )
 
-# Phase 4: compute offload.
+# Phase 4: compute offload + real-time mode.
 PHASE_4_PUBLIC_API = frozenset(
     {
         "OffloadPool",
         "OffloadEvent",
         "NonStrictOffloadWarning",
+        "rt",
+        "RealtimeDriftError",
     }
 )
 

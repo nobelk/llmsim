@@ -79,6 +79,32 @@ jitter suites in `tests/`). The only enforced timing assertion
 1.66× on both builds; an overlap-machinery regression reads ~1.0×), skipped
 on shared macOS runners per the Phase 2 noise findings.
 
+### Real-time mode (4.2): pacing overhead and drift regimes
+
+`rt.run` adds ~0.1 µs per event over `sim.run` when no sleeping is needed
+(measured: 10k zero-work events, 4.0 ms paced vs 3.0 ms unpaced, Apple M5,
+3.14.2t) — pacing itself is never the bottleneck. What actually causes
+drift, in decreasing order of likelihood:
+
+- **Event density above the sleep-granularity floor.** `time.sleep(1 ms)`
+  overshoots by ~260 µs (median) on macOS; when consecutive events are
+  closer together in *wall* terms (`inter-event sim time × factor`) than
+  roughly the platform's sleep overshoot, each step accumulates lateness.
+  Keep `factor × mean event spacing` comfortably above ~1 ms of wall time,
+  or run `strict=False` and let bursts hurry.
+- **Overlong offload payloads.** A strict slot blocks wall-clock until its
+  payload finishes; a payload that outlives its slot's real-time budget
+  (`delay × factor`) converts directly into drift and, under `strict=True`,
+  a `RealtimeDriftError` at the next event. The synergy only pays when the
+  payload fits the budget — measure the payload, then pick the slot.
+- **Interpreter pauses.** Free-threaded GC is stop-the-world; a collection
+  or a cold import mid-run reads as drift. The one-`factor` slack absorbs
+  routine pauses; sustained lateness is surfaced, never silently absorbed.
+
+Strict-mode tolerance is one `factor` unit of wall time (SimPy 3's rule):
+zero tolerance would false-positive on scheduler jitter, and a full factor
+of slack still catches every systematic overrun.
+
 ## Phase 3 — single-run conservative PDES
 
 Every number below is measured by `benchmarks/pdes_scaling.py` (a balanced

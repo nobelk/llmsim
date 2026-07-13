@@ -83,6 +83,51 @@ class _StopSimulation(SimulationError):  # noqa: N818 -- internal control signal
         raise event._value
 
 
+def _arm_until(
+    sim: "Sim", until: "float | Event[Any]"
+) -> "tuple[Event[Any] | None, Any]":
+    """Normalize a run's *until* into a stop event with the stop callback.
+
+    The single definition of ``until`` semantics, shared by :meth:`Sim.run`
+    and ``llmsim.rt.run`` so the two drivers cannot drift: a number becomes
+    an urgent stop event at that time (rejecting times at or before ``now``),
+    an event gains the stop callback, and an already-processed event needs no
+    run at all. Returns ``(armed event, None)``, or ``(None, value)`` when
+    the caller should return *value* immediately.
+    """
+    if not isinstance(until, Event):
+        at = float(until)
+        if at <= sim._now:
+            raise ValueError(
+                f"until(={at}) must be greater than the current "
+                f"simulation time ({sim._now})"
+            )
+        stop: Event[Any] = Event(sim)
+        stop._ok = True
+        stop._value = None
+        sim.schedule(stop, URGENT, at - sim._now)
+        until = stop
+    elif until.callbacks is None:
+        return None, until._value
+    assert until.callbacks is not None
+    until.callbacks.append(_StopSimulation.callback)
+    return until, None
+
+
+def _finish_empty_run(until: "Event[Any] | None") -> None:
+    """Translate schedule exhaustion into the driver's outcome.
+
+    Shared by both drivers (same drift-prevention role as
+    :func:`_arm_until`): a pending *until* means the run can never satisfy
+    its stop condition, otherwise exhaustion is a clean ``None`` return.
+    """
+    if until is not None:
+        raise RuntimeError(
+            f'no scheduled events left but the "until" event was not triggered: {until}'
+        ) from None
+    return None
+
+
 class Sim:
     """A single-threaded discrete-event simulation.
 
@@ -318,22 +363,9 @@ class Sim:
                 the schedule emptied first.
         """
         if until is not None:
-            if not isinstance(until, Event):
-                at = float(until)
-                if at <= self._now:
-                    raise ValueError(
-                        f"until(={at}) must be greater than the current "
-                        f"simulation time ({self._now})"
-                    )
-                stop: Event[Any] = Event(self)
-                stop._ok = True
-                stop._value = None
-                self.schedule(stop, URGENT, at - self._now)
-                until = stop
-            elif until.callbacks is None:
-                return until._value
-            assert until.callbacks is not None
-            until.callbacks.append(_StopSimulation.callback)
+            until, early_value = _arm_until(self, until)
+            if until is None:
+                return early_value
 
         # Bind the pool once: attaching one mid-run is unsupported (documented
         # on OffloadPool), and the bare loop below stays branch-free without it.
@@ -357,9 +389,4 @@ class Sim:
         except _StopSimulation as stopped:
             return stopped.args[0]
         except EmptySchedule:
-            if until is not None:
-                raise RuntimeError(
-                    f'no scheduled events left but the "until" event was not '
-                    f"triggered: {until}"
-                ) from None
-            return None
+            return _finish_empty_run(until)
