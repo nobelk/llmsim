@@ -137,7 +137,7 @@ Goal: round out the parallel story and freeze the API.
   with deterministic completion slots (`strict=True` default: block wall-clock
   at the slot), `strict=False` opt-out flagged by debug mode; defined
   failure/cancellation semantics; max-vs-sum ceiling documented.
-- [ ] **4.2 Real-time mode** — `rt.py`: wall-clock-synchronized stepping on
+- [x] **4.2 Real-time mode** — `rt.py`: wall-clock-synchronized stepping on
   `time.monotonic()`; offload synergy for hardware-in-the-loop.
 - [ ] **4.3 Migration guide from SimPy 3** — concept-mapping table
   (`env.process` → `sim.spawn`, `env.timeout` → `sim.delay`, …) plus worked

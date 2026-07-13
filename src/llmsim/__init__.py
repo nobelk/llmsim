@@ -23,6 +23,7 @@ A minimal simulation::
     sim.run(until=100.0)
 """
 
+from llmsim import rt
 from llmsim.core.conditions import AllOf, AnyOf, Condition
 from llmsim.core.errors import EmptySchedule, Interrupt, SimulationError
 from llmsim.core.events import Event, Timeout
@@ -60,6 +61,7 @@ from llmsim.resources.resource import (
     Resource,
 )
 from llmsim.resources.store import FilterStore, PriorityStore, Store
+from llmsim.rt import RealtimeDriftError
 
 __all__ = [
     # Core engine.
@@ -105,4 +107,7 @@ __all__ = [
     "OffloadPool",
     "OffloadEvent",
     "NonStrictOffloadWarning",
+    # Real-time mode (Phase 4).
+    "rt",
+    "RealtimeDriftError",
 ]

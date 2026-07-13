@@ -83,6 +83,34 @@ class _StopSimulation(SimulationError):  # noqa: N818 -- internal control signal
         raise event._value
 
 
+def _arm_until(sim: "Sim", until: "float | Event[Any]") -> "Event[Any] | None":
+    """Normalize a run's *until* into a stop event with the stop callback.
+
+    The single definition of ``until`` semantics, shared by :meth:`Sim.run`
+    and ``llmsim.rt.run`` so the two drivers cannot drift: a number becomes
+    an urgent stop event at that time (rejecting times at or before ``now``),
+    an event gains the stop callback, and an already-processed event returns
+    ``None`` (the caller returns its value immediately).
+    """
+    if not isinstance(until, Event):
+        at = float(until)
+        if at <= sim._now:
+            raise ValueError(
+                f"until(={at}) must be greater than the current "
+                f"simulation time ({sim._now})"
+            )
+        stop: Event[Any] = Event(sim)
+        stop._ok = True
+        stop._value = None
+        sim.schedule(stop, URGENT, at - sim._now)
+        until = stop
+    elif until.callbacks is None:
+        return None
+    assert until.callbacks is not None
+    until.callbacks.append(_StopSimulation.callback)
+    return until
+
+
 class Sim:
     """A single-threaded discrete-event simulation.
 
@@ -318,22 +346,11 @@ class Sim:
                 the schedule emptied first.
         """
         if until is not None:
-            if not isinstance(until, Event):
-                at = float(until)
-                if at <= self._now:
-                    raise ValueError(
-                        f"until(={at}) must be greater than the current "
-                        f"simulation time ({self._now})"
-                    )
-                stop: Event[Any] = Event(self)
-                stop._ok = True
-                stop._value = None
-                self.schedule(stop, URGENT, at - self._now)
-                until = stop
-            elif until.callbacks is None:
+            armed = _arm_until(self, until)
+            if armed is None:
+                assert isinstance(until, Event)
                 return until._value
-            assert until.callbacks is not None
-            until.callbacks.append(_StopSimulation.callback)
+            until = armed
 
         # Bind the pool once: attaching one mid-run is unsupported (documented
         # on OffloadPool), and the bare loop below stays branch-free without it.
