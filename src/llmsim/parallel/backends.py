@@ -19,6 +19,7 @@ see a parent token and are always cancelled at replication granularity
 (pending submissions are ``Future.cancel()``-ed, running ones finish).
 """
 
+import importlib
 import pickle
 import sys
 import threading
@@ -48,6 +49,14 @@ _worker_backend: ContextVar[str | None] = ContextVar(
 
 #: Concrete backend kinds, in documentation order.
 _CONCRETE_KINDS = ("threads", "interpreters", "processes")
+
+#: Executor nestings broken upstream on CPython 3.14, as ``(worker kind,
+#: nested pool kind)`` pairs -- a property of the executors themselves, kept
+#: here beside ``_worker_backend`` so every pool-nesting feature consults one
+#: table. Spike-verified: a process pool created inside a subinterpreter
+#: worker dies with ``BrokenProcessPool`` (multiprocessing is not
+#: subinterpreter-safe); every other combination works.
+_BROKEN_NESTINGS = frozenset({("interpreters", "processes")})
 
 
 class FactoryValidationError(TypeError):
@@ -235,6 +244,18 @@ def resolve_qualname(namespace: Any, qualname: str) -> Any:
     return target
 
 
+def import_factory(module_name: str, qualname: str) -> Callable[..., Any]:
+    """Import a validated callable by reference on the worker side.
+
+    The deserializing half of the "work is submitted as an importable
+    callable" rule, kept beside :func:`resolve_qualname` (the validating
+    half) so the two cannot disagree. Shared by the replication and offload
+    worker runners.
+    """
+    module = importlib.import_module(module_name)
+    return resolve_qualname(module, qualname)  # type: ignore[no-any-return]
+
+
 def validate_factory(factory: Callable[..., Any]) -> None:
     """Reject a factory that workers could not import by reference.
 
@@ -277,6 +298,23 @@ def validate_factory(factory: Callable[..., Any]) -> None:
         )
 
 
+def preflight_pickle(payload: Any, described_as: str, alternatives: str) -> bytes:
+    """Pickle *payload* for a worker transport, or fail actionably.
+
+    The one transport-preflight rule: callers describe the payload
+    (``described_as``) and name the backend switches that avoid the boundary
+    (``alternatives``); the pickled bytes are returned so a caller shipping
+    them pays for serialization exactly once. Raises :class:`TransportError`.
+    """
+    try:
+        return pickle.dumps(payload)
+    except Exception as error:
+        raise TransportError(
+            f"{described_as} cannot be pickled for the worker transport: "
+            f"{error}; {PICKLE_HINT} or use {alternatives}"
+        ) from error
+
+
 def preflight_config(config: Any, config_index: int) -> None:
     """Verify *config* survives a pickle boundary before any work is dispatched.
 
@@ -285,14 +323,7 @@ def preflight_config(config: Any, config_index: int) -> None:
     offending config index; the thread backend never calls this, so
     unpicklable configs remain usable for pure-thread studies.
     """
-    try:
-        pickle.dumps(config)
-    except Exception as error:
-        raise TransportError(
-            f"config {config_index} ({config!r}) cannot be pickled for the "
-            f"worker transport: {error}; {PICKLE_HINT} or use "
-            f"backend='threads'"
-        ) from error
+    preflight_pickle(config, f"config {config_index} ({config!r})", "backend='threads'")
 
 
 def warn_if_gil_reenabled(module_name: str, gil_before: bool, gil_after: bool) -> None:

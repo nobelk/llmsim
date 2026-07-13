@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 
 from llmsim import (
-    Event,
     NonStrictOffloadWarning,
     OffloadEvent,
     OffloadPool,
@@ -19,6 +18,7 @@ from llmsim.core.errors import Interrupt
 from llmsim.parallel.backends import FactoryValidationError, TransportError
 from llmsim.trace import trace
 from tests.parallel_support import (
+    Gen,
     offload_add,
     offload_blocking,
     offload_fail,
@@ -28,9 +28,6 @@ from tests.parallel_support import (
     offload_square,
     offload_started,
 )
-
-#: The process-body shape every inline test model uses.
-Gen = Generator[Event[Any], Any, None]
 
 
 def make_inline_sim() -> tuple[Sim, OffloadPool]:

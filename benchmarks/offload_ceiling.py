@@ -14,6 +14,7 @@ in simulated time gets pure dispatch overhead (the documented no-overlap
 slowdown regime).
 """
 
+import os
 import sys
 import time
 from collections.abc import Generator
@@ -45,41 +46,39 @@ def offload_cpu_burn(iterations: int) -> float:
     return total
 
 
-def overlapping_seconds(backend: OffloadBackendName, max_workers: int | None) -> float:
-    """Time the overlapping model: CONCURRENT offloads share every window."""
+def _timed_run(
+    backend: OffloadBackendName,
+    max_workers: int | None,
+    submitters: int,
+    offloads_each: int,
+) -> float:
+    """Time one study: *submitters* processes each offloading *offloads_each*."""
     sim = Sim(seed=MASTER_SEED)
 
     def submitter(sim: Sim) -> Generator[Event[Any], Any, None]:
-        for _ in range(WINDOWS):
+        for _ in range(offloads_each):
             yield sim.offload(offload_cpu_burn, BURN_ITERATIONS, delay=1.0)
 
     with OffloadPool(sim, backend=backend, max_workers=max_workers):
-        for _ in range(CONCURRENT):
+        for _ in range(submitters):
             sim.spawn(submitter)
         start = time.perf_counter()
         sim.run()
         return time.perf_counter() - start
 
 
+def overlapping_seconds(backend: OffloadBackendName, max_workers: int | None) -> float:
+    """Time the overlapping model: CONCURRENT offloads share every window."""
+    return _timed_run(backend, max_workers, CONCURRENT, WINDOWS)
+
+
 def no_overlap_seconds(backend: OffloadBackendName, max_workers: int | None) -> float:
     """Time the no-overlap regime: one chain, never two offloads in flight."""
-    sim = Sim(seed=MASTER_SEED)
-
-    def chain(sim: Sim) -> Generator[Event[Any], Any, None]:
-        for _ in range(WINDOWS * CONCURRENT):
-            yield sim.offload(offload_cpu_burn, BURN_ITERATIONS, delay=1.0)
-
-    with OffloadPool(sim, backend=backend, max_workers=max_workers):
-        sim.spawn(chain)
-        start = time.perf_counter()
-        sim.run()
-        return time.perf_counter() - start
+    return _timed_run(backend, max_workers, 1, WINDOWS * CONCURRENT)
 
 
 def main() -> None:
     """Print both curves: ``... offload_ceiling [backend ...]``."""
-    import os
-
     backends = sys.argv[1:] or ["threads", "processes"]
     gil = sys._is_gil_enabled()
     cores = os.process_cpu_count() or 1

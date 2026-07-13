@@ -1,27 +1,23 @@
 """Offload trace equivalence: adversarial ties and latency jitter (4.1)."""
 
-import os
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
-from llmsim import Event, OffloadPool, Sim
+from llmsim import OffloadPool, Sim
 from llmsim.parallel.backends import BackendName
 from llmsim.parallel.offload import OffloadBackendName
 from llmsim.trace import TraceRecord, trace
 from tests.parallel_support import (
+    OFFLOAD_WORKER_COUNTS,
+    POOLED_BACKENDS,
+    Gen,
     offload_jitter_square,
     offload_square,
 )
 
 _MASTER = 20260712
-
-_POOLED_BACKENDS: tuple[BackendName, ...] = ("threads", "interpreters", "processes")
-
-_WORKER_COUNTS = (1, 2, 4, os.process_cpu_count() or 1)
-
-Gen = Generator[Event[Any], Any, None]
 
 
 def run_adversarial_model(
@@ -82,8 +78,8 @@ def adversarial_reference() -> list[TraceRecord]:
 class TestAdversarialTies:
     """Slot events tied with local events keep the sequential order."""
 
-    @pytest.mark.parametrize("backend", _POOLED_BACKENDS)
-    @pytest.mark.parametrize("max_workers", _WORKER_COUNTS)
+    @pytest.mark.parametrize("backend", POOLED_BACKENDS)
+    @pytest.mark.parametrize("max_workers", OFFLOAD_WORKER_COUNTS)
     def test_ties_are_bitwise_stable_on_every_backend_and_worker_count(
         self,
         backend: BackendName,
@@ -99,7 +95,7 @@ class TestAdversarialTies:
 class TestLatencyJitter:
     """Randomized worker latency never changes the strict-mode trace."""
 
-    @pytest.mark.parametrize("backend", _POOLED_BACKENDS)
+    @pytest.mark.parametrize("backend", POOLED_BACKENDS)
     def test_jittered_payload_trace_equals_plain_reference(
         self, backend: BackendName, adversarial_reference: list[TraceRecord]
     ) -> None:

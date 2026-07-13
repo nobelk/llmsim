@@ -7,6 +7,7 @@ import this module by name (``tests.parallel_support``); the repo root is on
 ``sys.path`` via pytest's ``pythonpath`` and propagates to spawned workers.
 """
 
+import os
 import random
 import threading
 import time
@@ -15,8 +16,17 @@ from typing import Any
 
 from llmsim.core.events import Event
 from llmsim.core.sim import Sim
-from llmsim.parallel.backends import CancelToken
+from llmsim.parallel.backends import BackendName, CancelToken
 from llmsim.rand.streams import SeedStream
+
+#: The process-body shape the offload test models share.
+Gen = Generator[Event[Any], Any, None]
+
+#: The three pooled backend kinds, shared by the offload suites.
+POOLED_BACKENDS: tuple[BackendName, ...] = ("threads", "interpreters", "processes")
+
+#: The spec's enumerated offload worker counts.
+OFFLOAD_WORKER_COUNTS: tuple[int, ...] = (1, 2, 4, os.process_cpu_count() or 1)
 
 
 def sequential_reference(
@@ -305,61 +315,25 @@ def offload_model_kpis(
     return tracer.records, outcomes
 
 
-def nested_auto_offload_factory(stream: SeedStream, config: Any) -> tuple[str, float]:
-    """Build a Sim with a default-backend OffloadPool inside a worker.
+def nested_offload_factory(stream: SeedStream, config: Any) -> tuple[str, float]:
+    """Build a Sim with an OffloadPool inside an Experiment worker.
 
-    Returns the pool's resolved kind plus the offload result, proving the
-    nested-pool rule: ``backend="auto"`` resolves to ``"inline"`` inside an
-    Experiment replication worker.
+    ``config`` is ``(offload backend name, x)``. Returns the pool's resolved
+    kind (proving the nested-pool rule: ``"auto"`` resolves to ``"inline"``
+    inside a worker) and ``x**2`` plus a stream draw (so same-seed tests
+    exercise the derived RNG through the offload path).
     """
     from llmsim.parallel.offload import OffloadPool
 
+    backend_name, x = config
     sim = Sim(rng=stream.rng())
     collected: list[float] = []
 
-    def proc(sim: Sim) -> Generator[Event[Any], Any, None]:
-        value = yield sim.offload(offload_square, float(config), delay=1.0)
+    def proc(sim: Sim) -> Gen:
+        value = yield sim.offload(offload_square, float(x), delay=1.0)
         collected.append(value + sim.rng.random())
 
-    with OffloadPool(sim) as pool:
+    with OffloadPool(sim, backend=backend_name, max_workers=1) as pool:
         sim.spawn(proc)
         sim.run()
         return pool.kind, collected[0]
-
-
-def nested_threads_offload_factory(stream: SeedStream, config: Any) -> float:
-    """Explicitly opt in to a thread offload pool inside a worker."""
-    from llmsim.parallel.offload import OffloadPool
-
-    sim = Sim(rng=stream.rng())
-    collected: list[float] = []
-
-    def proc(sim: Sim) -> Generator[Event[Any], Any, None]:
-        value = yield sim.offload(offload_square, float(config), delay=1.0)
-        collected.append(value)
-
-    with OffloadPool(sim, backend="threads", max_workers=1):
-        sim.spawn(proc)
-        sim.run()
-        return collected[0]
-
-
-def nested_processes_offload_factory(stream: SeedStream, config: Any) -> float:
-    """Request a process offload pool inside a worker.
-
-    Rejected inside interpreters-backend workers (multiprocessing is not
-    subinterpreter-safe); honored inside thread and process workers.
-    """
-    from llmsim.parallel.offload import OffloadPool
-
-    sim = Sim(rng=stream.rng())
-    collected: list[float] = []
-
-    def proc(sim: Sim) -> Generator[Event[Any], Any, None]:
-        value = yield sim.offload(offload_square, float(config), delay=1.0)
-        collected.append(value)
-
-    with OffloadPool(sim, backend="processes", max_workers=1):
-        sim.spawn(proc)
-        sim.run()
-        return collected[0]

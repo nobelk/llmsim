@@ -30,7 +30,6 @@ pending work and raises :class:`ReplicationError` naming the offending
 never a silent partial result set.
 """
 
-import importlib
 import inspect
 import pickle
 import sys
@@ -49,8 +48,8 @@ from llmsim.parallel.backends import (
     ExecutionBackend,
     TransportError,
     _worker_backend,
+    import_factory,
     preflight_config,
-    resolve_qualname,
     validate_factory,
     warn_if_gil_reenabled,
 )
@@ -138,16 +137,6 @@ class ReplicationResult:
         )
 
 
-def _import_factory(module_name: str, qualname: str) -> Factory:
-    """Import the factory by reference on the worker side.
-
-    Uses the same :func:`~llmsim.parallel.backends.resolve_qualname` rule the
-    construction-time validator used, so the two cannot disagree.
-    """
-    module = importlib.import_module(module_name)
-    return resolve_qualname(module, qualname)  # type: ignore[no-any-return]
-
-
 def _encode_payload(
     value: Any, stream: SeedStream, *, transport: bool, spool: bool
 ) -> Any:
@@ -195,7 +184,7 @@ def _run_replication(
     cancel: CancelToken,
     transport: bool,
     spool: bool,
-    backend_kind: str | None = None,
+    backend_kind: str,
 ) -> Any:
     """Run one replication worker-side and encode its result for transport.
 
@@ -211,21 +200,20 @@ def _run_replication(
     zstd-compressed to bound coordinator memory.
     """
     gil_before = sys._is_gil_enabled()
-    factory = _import_factory(module_name, qualname)
+    factory = import_factory(module_name, qualname)
     warn_if_gil_reenabled(module_name, gil_before, sys._is_gil_enabled())
 
     # Mark this context as a replication worker of the given backend kind, so
     # an OffloadPool the factory builds resolves backend="auto" to inline (the
     # nested-pool rule) instead of oversubscribing nproc x nproc workers.
-    token = _worker_backend.set(backend_kind) if backend_kind is not None else None
+    token = _worker_backend.set(backend_kind)
     try:
         if accepts_cancel:
             value = factory(stream, config, cancel)
         else:
             value = factory(stream, config)
     finally:
-        if token is not None:
-            _worker_backend.reset(token)
+        _worker_backend.reset(token)
     return _encode_payload(value, stream, transport=transport, spool=spool)
 
 

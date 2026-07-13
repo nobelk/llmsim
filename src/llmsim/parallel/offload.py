@@ -36,26 +36,19 @@ from typing import Any, Literal, TypeVar
 from llmsim.core.events import NORMAL, PENDING, Event, EventCallback
 from llmsim.core.sim import Sim
 from llmsim.parallel.backends import (
-    PICKLE_HINT,
+    _BROKEN_NESTINGS,
     ExecutionBackend,
-    TransportError,
     _worker_backend,
+    import_factory,
+    preflight_pickle,
     validate_factory,
 )
-from llmsim.parallel.replicate import _import_factory
 
 T = TypeVar("T")
 
 #: The offload backend vocabulary: the Phase 2 names plus the offload-local
 #: ``"inline"`` reference mode (run synchronously on the owning thread).
 OffloadBackendName = Literal["auto", "inline", "threads", "interpreters", "processes"]
-
-#: The one nesting the Group 2 spike found broken on CPython 3.14: a process
-#: pool created inside a subinterpreter worker dies with ``BrokenProcessPool``
-#: (multiprocessing is not subinterpreter-safe). Everything else -- threads or
-#: interpreters anywhere, processes inside thread/process workers -- works and
-#: is honored when explicitly requested.
-_REJECTED_NESTINGS = {("interpreters", "processes")}
 
 
 class NonStrictOffloadWarning(RuntimeWarning):
@@ -76,27 +69,21 @@ def _run_offload(
     qualified name)`` reference and is imported worker-side -- one code path
     on every backend (normative decision 5).
     """
-    fn = _import_factory(module_name, qualname)
+    fn = import_factory(module_name, qualname)
     return fn(*args, **kwargs)
 
 
-def _preflight_payload(
-    fn: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]
-) -> None:
-    """Verify offload arguments survive a pickle boundary before dispatch.
+def _run_offload_packed(module_name: str, qualname: str, packed: bytes) -> Any:
+    """Run one payload whose arguments arrived as preflighted pickle bytes.
 
-    Called only on transport backends (interpreters/processes), mirroring
-    :func:`~llmsim.parallel.backends.preflight_config`. Raises
-    :class:`~llmsim.parallel.backends.TransportError` naming the payload.
+    Transport backends ship the bytes the submission-time preflight already
+    produced, so arguments are serialized exactly once per offload. The bytes
+    were pickled by this simulation's own coordinator -- the same trust
+    boundary as ``concurrent.futures``' own argument transport (the rule
+    ``replicate._decode_payload`` documents).
     """
-    try:
-        pickle.dumps((args, kwargs))
-    except Exception as error:
-        raise TransportError(
-            f"arguments of offloaded {fn.__qualname__!r} cannot be pickled "
-            f"for the worker transport: {error}; {PICKLE_HINT} or use "
-            f"backend='threads' or backend='inline'"
-        ) from error
+    args, kwargs = pickle.loads(packed)
+    return _run_offload(module_name, qualname, args, kwargs)
 
 
 class OffloadEvent(Event[T]):
@@ -115,22 +102,13 @@ class OffloadEvent(Event[T]):
     automatically (the requirements' cancellation contract).
     """
 
-    __slots__ = (
-        "_pool",
-        "_future",
-        "_captured",
-        "_qualname",
-        "_strict",
-        "_abandoned",
-        "_earliest",
-    )
+    __slots__ = ("_pool", "_future", "_qualname", "_strict", "_abandoned", "_earliest")
 
     def __init__(
         self,
         sim: "Sim",
         pool: "OffloadPool",
-        future: "Future[Any] | None",
-        captured: tuple[bool, Any] | None,
+        future: "Future[Any]",
         qualname: str,
         *,
         strict: bool,
@@ -146,8 +124,9 @@ class OffloadEvent(Event[T]):
         self.callbacks: list[EventCallback] | None = [self._resolve] if strict else []
         self.defused = False
         self._pool = pool
+        #: The payload's outcome. The inline mode fills a pre-completed
+        #: Future at submission, so every mode resolves through one path.
         self._future = future
-        self._captured = captured
         self._qualname = qualname
         self._strict = strict
         self._abandoned = False
@@ -171,8 +150,7 @@ class OffloadEvent(Event[T]):
         self._abandoned = True
         # A discarded failure must never crash the run.
         self.defused = True
-        if self._future is not None:
-            self._future.cancel()
+        self._future.cancel()
         self._pool._forget(self)
 
     def _waiter_unhooked(self) -> None:
@@ -185,9 +163,6 @@ class OffloadEvent(Event[T]):
 
     def _outcome(self) -> tuple[bool, Any]:
         """Return ``(ok, value)``, blocking on the worker future if needed."""
-        if self._captured is not None:
-            return self._captured
-        assert self._future is not None
         try:
             # Strict mode's wall-clock block at the slot happens here.
             return (True, self._future.result())
@@ -201,8 +176,8 @@ class OffloadEvent(Event[T]):
     def _resolve(self, _event: "Event[Any]") -> None:
         """Swap the real outcome in at the completion slot (strict mode)."""
         if self._abandoned:
-            self._ok = True
-            self._value = None
+            # The placeholder (_ok=True, _value=None) is already the
+            # "discarded" outcome; deliver it without touching the future.
             return
         self._pool._forget(self)
         self._ok, self._value = self._outcome()
@@ -242,7 +217,15 @@ class OffloadPool:
             (``backend="processes"`` inside an interpreters-backend worker).
     """
 
-    __slots__ = ("_sim", "kind", "_max_workers", "_executor", "_live", "_closed")
+    __slots__ = (
+        "_sim",
+        "_backend",
+        "_max_workers",
+        "_executor",
+        "_pending",
+        "_strict_live",
+        "_closed",
+    )
 
     def __init__(
         self,
@@ -257,30 +240,34 @@ class OffloadPool:
                 "this Sim already has an offload pool attached; a Sim accepts "
                 "exactly one OffloadPool"
             )
-        #: The resolved concrete mode: ``"inline"`` or a Phase 2 backend kind.
-        self.kind: str = self._resolve_kind(backend)
+        #: The resolved pooled backend, or ``None`` for the inline mode.
+        self._backend: ExecutionBackend | None = self._resolve_backend(backend)
         self._sim = sim
         self._max_workers = max_workers
         self._executor: Executor | None = None
-        #: Undelivered events: strict ones until their slot resolves, and
-        #: non-strict ones until delivery. Owner-thread only -- no lock.
-        self._live: list[OffloadEvent[Any]] = []
+        #: Undelivered non-strict events, polled between steps. Strict events
+        #: are tracked separately so the per-step poll never scans them.
+        self._pending: list[OffloadEvent[Any]] = []
+        #: Unresolved strict events, held only so :meth:`close` can abandon
+        #: them; identity-keyed for O(1) removal at slot resolution (removal
+        #: order never feeds the schedule). Owner-thread only -- no lock.
+        self._strict_live: set[OffloadEvent[Any]] = set()
         self._closed = False
         sim._offload = self
 
     @staticmethod
-    def _resolve_kind(backend: OffloadBackendName) -> str:
-        """Resolve *backend*, honoring an explicit choice where possible."""
+    def _resolve_backend(backend: OffloadBackendName) -> ExecutionBackend | None:
+        """Resolve *backend* (``None`` = inline), honoring explicit choices."""
         worker_kind = _worker_backend.get()
         if backend == "inline":
-            return "inline"
+            return None
         if backend == "auto":
             if worker_kind is not None:
                 # Nested-pool rule: inside an Experiment worker, default to
                 # inline rather than oversubscribing nproc x nproc workers.
-                return "inline"
-            return ExecutionBackend.resolve("auto").kind
-        if worker_kind is not None and (worker_kind, backend) in _REJECTED_NESTINGS:
+                return None
+            return ExecutionBackend.resolve("auto")
+        if worker_kind is not None and (worker_kind, backend) in _BROKEN_NESTINGS:
             raise RuntimeError(
                 f"offload backend {backend!r} cannot run inside an "
                 f"{worker_kind!r}-backend Experiment worker: multiprocessing "
@@ -288,12 +275,12 @@ class OffloadPool:
                 f"backend='inline' (the nested default), 'threads', or "
                 f"'interpreters', or run the Experiment on another backend"
             )
-        return ExecutionBackend(backend).kind
+        return ExecutionBackend(backend)
 
     @property
-    def _transport(self) -> bool:
-        """Whether payload arguments cross a pickle boundary."""
-        return self.kind in ("interpreters", "processes")
+    def kind(self) -> str:
+        """The resolved concrete mode: ``"inline"`` or a Phase 2 backend kind."""
+        return "inline" if self._backend is None else self._backend.kind
 
     def submit(
         self,
@@ -324,7 +311,7 @@ class OffloadPool:
                 "strict=False for as-available delivery)"
             )
         sim = self._sim
-        if not strict and sim._owner_thread is not None:
+        if not strict and sim.debug:
             warnings.warn(
                 f"non-strict offload of {fn.__qualname__!r} at t={sim.now}: "
                 f"delivery time depends on wall-clock completion, so event "
@@ -334,52 +321,60 @@ class OffloadPool:
                 stacklevel=3,
             )
 
-        future: Future[Any] | None = None
-        captured: tuple[bool, Any] | None = None
-        if self.kind == "inline":
-            # The sequential reference: run now, deliver at the slot -- the
-            # failure contract (capture here, re-raise at the slot) is
-            # identical to the pooled backends by construction.
+        backend = self._backend
+        future: Future[Any]
+        if backend is None:
+            # The inline reference: run now on the owning thread, deliver at
+            # the slot through a pre-completed future -- literally the same
+            # resolution path as the pooled backends.
+            future = Future()
             try:
-                captured = (True, fn(*args, **kwargs))
+                future.set_result(fn(*args, **kwargs))
             except BaseException as raised:  # noqa: BLE001 -- match executors
-                captured = (False, raised)
+                future.set_exception(raised)
+        elif backend.requires_transport:
+            packed = preflight_pickle(
+                (args, kwargs),
+                f"arguments of offloaded {fn.__qualname__!r}",
+                "backend='threads' or backend='inline'",
+            )
+            future = self._ensure_executor().submit(
+                _run_offload_packed, fn.__module__, fn.__qualname__, packed
+            )
         else:
-            if self._transport:
-                _preflight_payload(fn, args, kwargs)
             future = self._ensure_executor().submit(
                 _run_offload, fn.__module__, fn.__qualname__, args, kwargs
             )
 
         event: OffloadEvent[Any] = OffloadEvent(
-            sim, self, future, captured, fn.__qualname__, strict=strict
+            sim, self, future, fn.__qualname__, strict=strict
         )
         if strict:
-            self._live.append(event)
+            self._strict_live.add(event)
             assert delay is not None
             sim.schedule(event, NORMAL, delay)
-            return event
-
-        event._earliest = sim.now + (delay or 0.0)
-        if captured is not None:
-            self._deliver(event)
         else:
-            self._live.append(event)
+            event._earliest = sim.now + (delay or 0.0)
+            self._pending.append(event)
         return event
 
     def poll(self) -> None:
         """Deliver completed non-strict results (called between steps)."""
-        live = self._live
-        if not live:
+        pending = self._pending
+        if not pending:
             return
-        remaining: list[OffloadEvent[Any]] = []
-        for event in live:
-            future = event._future
-            if not event._strict and future is not None and future.done():
+        # Allocation-free in the common nothing-completed case: the surviving
+        # list is only rebuilt once a delivery actually happens.
+        remaining: list[OffloadEvent[Any]] | None = None
+        for index, event in enumerate(pending):
+            if event._future.done():
+                if remaining is None:
+                    remaining = pending[:index]
                 self._deliver(event)
-            else:
+            elif remaining is not None:
                 remaining.append(event)
-        self._live = remaining
+        if remaining is not None:
+            self._pending = remaining
 
     def drain(self) -> bool:
         """Block for outstanding non-strict work once the schedule empties.
@@ -388,14 +383,10 @@ class OffloadPool:
         ``run()`` waits wall-clock for at least one outstanding payload,
         delivers everything then complete, and keeps stepping.
         """
-        futures = [
-            event._future
-            for event in self._live
-            if not event._strict and event._future is not None
-        ]
-        if not futures:
+        pending = self._pending
+        if not pending:
             return False
-        wait(futures, return_when=FIRST_COMPLETED)
+        wait([event._future for event in pending], return_when=FIRST_COMPLETED)
         self.poll()
         return True
 
@@ -408,7 +399,7 @@ class OffloadPool:
         if self._closed:
             return
         self._closed = True
-        for event in list(self._live):
+        for event in list(self._pending) + list(self._strict_live):
             event.cancel()
         if self._executor is not None:
             self._executor.shutdown(wait=True, cancel_futures=True)
@@ -422,15 +413,19 @@ class OffloadPool:
 
     def _forget(self, event: OffloadEvent[Any]) -> None:
         """Drop *event* from the undelivered set (resolution or cancel)."""
-        try:
-            self._live.remove(event)
-        except ValueError:
-            pass
+        if event._strict:
+            self._strict_live.discard(event)
+        else:
+            try:
+                self._pending.remove(event)
+            except ValueError:
+                pass
 
     def _ensure_executor(self) -> Executor:
         """Create the executor on first pooled submission (lazy startup)."""
         if self._executor is None:
-            self._executor = ExecutionBackend(self.kind).executor(self._max_workers)
+            assert self._backend is not None
+            self._executor = self._backend.executor(self._max_workers)
         return self._executor
 
     def __enter__(self) -> "OffloadPool":
@@ -448,7 +443,8 @@ class OffloadPool:
 
     def __repr__(self) -> str:
         """Show the resolved kind and pool state for debugging."""
+        outstanding = len(self._pending) + len(self._strict_live)
         return (
-            f"OffloadPool(kind={self.kind!r}, live={len(self._live)}, "
+            f"OffloadPool(kind={self.kind!r}, outstanding={outstanding}, "
             f"closed={self._closed})"
         )

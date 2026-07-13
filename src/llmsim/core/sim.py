@@ -150,6 +150,16 @@ class Sim:
         return self._now
 
     @property
+    def debug(self) -> bool:
+        """Whether debug mode is on (``debug=True`` or ``LLMSIM_DEBUG=1``).
+
+        Core owns this question; features that must "flag loudly in debug
+        mode" (a non-strict offload, for example) ask here instead of
+        inferring it from the thread-ownership guard.
+        """
+        return self._owner_thread is not None
+
+    @property
     def active_process(self) -> "Process[Any] | None":
         """The process whose event is currently being resumed, if any."""
         return self._active_process
