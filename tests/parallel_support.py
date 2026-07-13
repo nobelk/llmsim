@@ -237,3 +237,106 @@ def offload_blocking(x: float) -> float:
     offload_started.set()
     offload_release.wait(timeout=30)
     return x * x
+
+
+def offload_model_kpis(backend: str, max_workers: int | None, seed: int) -> Any:
+    """Run the canonical offload model; return ``(trace records, outcomes)``.
+
+    The single source of truth for what the offload conformance and
+    equivalence tests execute: staggered processes submit overlapping strict
+    offloads (one wall-clock-slow, to force the block-at-the-slot path) mixed
+    with plain timeouts that tie with completion slots. Identical inputs must
+    produce identical traces and outcomes on every backend and worker count.
+    """
+    from llmsim.parallel.offload import OffloadBackendName, OffloadPool
+    from llmsim.trace import trace
+
+    sim = Sim(seed=seed)
+    outcomes: dict[tuple[str, int], tuple[float, float]] = {}
+
+    def submitter(
+        sim: Sim, name: str, start: float, xs: list[float], slot: float
+    ) -> Generator[Event[Any], Any, None]:
+        yield sim.delay(start)
+        events = [
+            sim.offload(
+                offload_slow_square if index == 0 else offload_square,
+                *((x, 0.02) if index == 0 else (x,)),
+                delay=slot + index,
+            )
+            for index, x in enumerate(xs)
+        ]
+        # A timeout deliberately tied with the first completion slot.
+        yield sim.delay(slot)
+        for index, event in enumerate(events):
+            value = yield event
+            outcomes[(name, index)] = (sim.now, value)
+
+    backend_name: OffloadBackendName = backend  # type: ignore[assignment]
+    with OffloadPool(sim, backend=backend_name, max_workers=max_workers):
+        tracer = trace(sim)
+        sim.spawn(submitter, "a", 0.0, [2.0, 3.0, 4.0], 5.0)
+        sim.spawn(submitter, "b", 1.0, [5.0, 6.0], 5.0)
+        sim.spawn(submitter, "c", 2.5, [7.0], 0.5)
+        sim.run()
+    return tracer.records, outcomes
+
+
+def nested_auto_offload_factory(stream: SeedStream, config: Any) -> tuple[str, float]:
+    """Build a Sim with a default-backend OffloadPool inside a worker.
+
+    Returns the pool's resolved kind plus the offload result, proving the
+    nested-pool rule: ``backend="auto"`` resolves to ``"inline"`` inside an
+    Experiment replication worker.
+    """
+    from llmsim.parallel.offload import OffloadPool
+
+    sim = Sim(rng=stream.rng())
+    collected: list[float] = []
+
+    def proc(sim: Sim) -> Generator[Event[Any], Any, None]:
+        value = yield sim.offload(offload_square, float(config), delay=1.0)
+        collected.append(value + sim.rng.random())
+
+    with OffloadPool(sim) as pool:
+        sim.spawn(proc)
+        sim.run()
+        return pool.kind, collected[0]
+
+
+def nested_threads_offload_factory(stream: SeedStream, config: Any) -> float:
+    """Explicitly opt in to a thread offload pool inside a worker."""
+    from llmsim.parallel.offload import OffloadPool
+
+    sim = Sim(rng=stream.rng())
+    collected: list[float] = []
+
+    def proc(sim: Sim) -> Generator[Event[Any], Any, None]:
+        value = yield sim.offload(offload_square, float(config), delay=1.0)
+        collected.append(value)
+
+    with OffloadPool(sim, backend="threads", max_workers=1):
+        sim.spawn(proc)
+        sim.run()
+        return collected[0]
+
+
+def nested_processes_offload_factory(stream: SeedStream, config: Any) -> float:
+    """Request a process offload pool inside a worker.
+
+    Rejected inside interpreters-backend workers (multiprocessing is not
+    subinterpreter-safe); honored inside thread and process workers.
+    """
+    from llmsim.parallel.offload import OffloadPool
+
+    sim = Sim(rng=stream.rng())
+    collected: list[float] = []
+
+    def proc(sim: Sim) -> Generator[Event[Any], Any, None]:
+        value = yield sim.offload(offload_square, float(config), delay=1.0)
+        collected.append(value)
+
+    with OffloadPool(sim, backend="processes", max_workers=1):
+        sim.spawn(proc)
+        sim.run()
+        return collected[0]
