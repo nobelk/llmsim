@@ -106,6 +106,7 @@ def test_worker_runner_warns_when_model_import_reenables_gil(
             CancelToken(),
             False,
             False,
+            "threads",
         )
 
 
@@ -124,5 +125,6 @@ def test_worker_runner_quiet_when_gil_state_stable() -> None:
             CancelToken(),
             False,
             False,
+            "threads",
         )
     assert value == support.trivial_task(stream, {})

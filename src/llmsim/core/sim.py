@@ -11,7 +11,7 @@ import os
 import random
 import threading
 from collections.abc import Callable, Coroutine, Generator, Iterable
-from typing import TYPE_CHECKING, Any, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast, overload
 
 from llmsim.core.errors import EmptySchedule, SimulationError, copy_with_cause
 from llmsim.core.events import NORMAL, URGENT, Event, Timeout
@@ -35,6 +35,41 @@ ProcessSpec = Callable[..., Any] | Generator[Any, Any, Any] | Coroutine[Any, Any
 #: the monotonic ``eid`` breaking priority ties by insertion order. No key
 #: depends on wall-clock time or hash order (determinism decision).
 _ScheduledEvent = tuple[float, int, int, Event[Any]]
+
+
+class OffloadHandler(Protocol):
+    """The seam an offload pool plugs into a :class:`Sim` (Phase 4.1).
+
+    The core defines only this protocol -- it never imports
+    ``llmsim.parallel`` -- so the dependency points from the pool to the
+    engine, keeping the sequential core stdlib-only and lock-free. The
+    concrete implementation is ``llmsim.parallel.offload.OffloadPool``,
+    which assigns itself to ``sim._offload`` at construction.
+    """
+
+    def submit(
+        self,
+        fn: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        *,
+        delay: float | None,
+        strict: bool,
+    ) -> Event[Any]:
+        """Dispatch one payload and return its completion event."""
+        ...
+
+    def poll(self) -> None:
+        """Deliver any completed non-strict results (called between steps)."""
+        ...
+
+    def drain(self) -> bool:
+        """Block for outstanding non-strict work when the schedule empties.
+
+        Returns ``True`` when at least one delivery was scheduled (so the run
+        loop continues), ``False`` when nothing is outstanding.
+        """
+        ...
 
 
 class _StopSimulation(SimulationError):  # noqa: N818 -- internal control signal
@@ -74,6 +109,7 @@ class Sim:
         "_active_process",
         "_owner_thread",
         "_trace",
+        "_offload",
         "rng",
     )
 
@@ -104,11 +140,24 @@ class Sim:
             else None
         )
         self._trace: TraceSink | None = None
+        #: The attached offload pool, or ``None``. Like ``_trace``, the hot
+        #: path pays a single ``is not None`` check when no pool is attached.
+        self._offload: OffloadHandler | None = None
 
     @property
     def now(self) -> float:
         """The current simulation time."""
         return self._now
+
+    @property
+    def debug(self) -> bool:
+        """Whether debug mode is on (``debug=True`` or ``LLMSIM_DEBUG=1``).
+
+        Core owns this question; features that must "flag loudly in debug
+        mode" (a non-strict offload, for example) ask here instead of
+        inferring it from the thread-ownership guard.
+        """
+        return self._owner_thread is not None
 
     @property
     def active_process(self) -> "Process[Any] | None":
@@ -213,6 +262,48 @@ class Sim:
             runnable = process
         return Process(self, runnable)
 
+    def offload(
+        self,
+        fn: Callable[..., T],
+        /,
+        *args: Any,
+        delay: float | None = None,
+        strict: bool = True,
+        **kwargs: Any,
+    ) -> Event[T]:
+        """Run ``fn(*args, **kwargs)`` on the attached offload pool.
+
+        Returns an event that a process waits on like any other. In strict
+        mode (the default) the result is delivered exactly at the
+        deterministic completion slot ``now + delay``, regardless of how long
+        the computation takes on the wall clock; with ``strict=False`` it is
+        delivered as soon as it is available (nondeterministic ordering), no
+        earlier than ``now + delay`` when *delay* is given.
+
+        Args:
+            fn: An importable module-level callable (validated at submission);
+                its positional and keyword arguments follow, except the
+                reserved keywords *delay* and *strict*.
+            delay: The completion-slot offset, a pure function of model state
+                (required in strict mode); under ``strict=False``, an
+                earliest-delivery lower bound.
+            strict: Whether delivery is pinned to the deterministic slot.
+
+        Raises:
+            SimulationError: if no offload pool is attached to this ``Sim``.
+            ValueError: if *delay* is negative, or omitted in strict mode.
+        """
+        if self._offload is None:
+            raise SimulationError(
+                "no offload pool attached to this Sim; construct "
+                "llmsim.OffloadPool(sim, backend=...) before calling "
+                "sim.offload()"
+            )
+        return cast(
+            "Event[T]",
+            self._offload.submit(fn, args, kwargs, delay=delay, strict=strict),
+        )
+
     def run(self, until: "float | Event[Any] | None" = None) -> Any:
         """Advance the simulation until *until* is reached.
 
@@ -244,9 +335,25 @@ class Sim:
             assert until.callbacks is not None
             until.callbacks.append(_StopSimulation.callback)
 
+        # Bind the pool once: attaching one mid-run is unsupported (documented
+        # on OffloadPool), and the bare loop below stays branch-free without it.
+        offload = self._offload
         try:
-            while True:
-                self.step()
+            if offload is None:
+                while True:
+                    self.step()
+            else:
+                while True:
+                    try:
+                        self.step()
+                    except EmptySchedule:
+                        # Outstanding non-strict offloads may still deliver:
+                        # drain() blocks wall-clock for them and schedules
+                        # their deliveries, so a result is never dropped.
+                        if not offload.drain():
+                            raise
+                        continue
+                    offload.poll()
         except _StopSimulation as stopped:
             return stopped.args[0]
         except EmptySchedule:

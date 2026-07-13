@@ -1,5 +1,84 @@
 # Performance notes
 
+## Phase 4 — compute offload
+
+Every number below is measured by `benchmarks/offload_ceiling.py` (48
+pure-Python CPU payloads of ~15 ms, 6 overlapping per busy window, full
+`sim.run()` wall clock including lazy pool startup, vs the inline sequential
+reference). Machine: Apple M5 (4P+6E), macOS, CPython 3.14.2t / 3.14.4.
+**Correctness is unconditional** — strict-mode traces are bitwise-equal to
+the inline reference on every backend and worker count, under randomized
+worker latency, gated in CI; the numbers here are the honest performance
+record.
+
+### The max-vs-sum ceiling
+
+With strict completion slots, a busy window costs the **max** of its
+overlapping offloads on a big-enough pool versus their **sum** inline — so
+the best possible speedup is the number of offloads that overlap in
+*simulated* time, never the worker count. A model that offloads serially
+(next submitted after the previous resolves) has a ceiling of 1×.
+
+Free-threaded build (3.14.2t), 6-way overlap:
+
+| Workers | threads | processes |
+|---:|---:|---:|
+| 2 | 2.08× | 1.66× |
+| 4 | 2.69× | 2.52× |
+| 8 | 2.74× | 2.77× |
+
+GIL build (3.14.4):
+
+| Workers | threads | processes |
+|---:|---:|---:|
+| 2 | 1.01× | 1.66× |
+| 4 | 1.00× | 2.31× |
+| 8 | 0.99× | 2.51× |
+
+No-overlap regime (one offload in flight at a time, 2 workers): threads
+0.99–1.03×, processes 1.07–1.09× — pure dispatch overhead, no possible win.
+
+Why the thread column scales here but anti-scales for replications: the
+benchmark payload is a locally-bound arithmetic loop, exactly the shape the
+Phase 2 probe measured at 3.54× (below). An offload payload that leans on
+`random.py` globals or other shared module-level objects will hit the same
+refcount contention as the replication engine loop — thread-backend offload
+scaling is **payload-dependent** on 3.14.2t, while `backend="processes"`
+scales regardless of payload shape. On GIL builds, thread offload of
+pure-Python payloads is flat 1.0× by construction (the GIL serializes them);
+it only pays off for payloads that release the GIL (NumPy, C extensions).
+
+### Slowdown regimes (offload-specific)
+
+- **No overlap in simulated time** — the regime above: every offload pays
+  dispatch and transport for zero concurrency. Offload only work that
+  overlaps other offloads (or would, on a pool).
+- **Cheap payloads** — a payload cheaper than its dispatch (pickle + IPC on
+  transport backends, ~1 ms scale) makes the ratio worse; the benchmark's
+  ~15 ms payloads are near the practical floor for the process backend.
+- **Pure-Python payloads on threads** — flat on GIL builds; contention-bound
+  on 3.14.2t unless the payload avoids shared-object hot paths (see above).
+- **A payload that never returns blocks forever** — `Future.cancel()` cannot
+  interrupt running work on any executor, so a hung payload blocks its
+  strict slot (and `OffloadPool.close`) indefinitely. There is no offload
+  timeout in 1.0; keep payloads finite.
+- **Nested pools** — inside an `Experiment` worker, `backend="auto"`
+  resolves to inline (nproc × nproc oversubscription never pays); pooled
+  offload inside workers is explicit opt-in. Spike-verified on 3.14.2:
+  threads and interpreters nest anywhere, processes nest inside thread and
+  process workers, and **process pools inside subinterpreter workers are
+  broken upstream** (`BrokenProcessPool`) — llmsim rejects that combination
+  at construction with an actionable error.
+
+### CI gate
+
+Correctness gates are strict (conformance, adversarial-tie equivalence, and
+jitter suites in `tests/`). The only enforced timing assertion
+(`benchmarks/test_offload_ceiling.py`) is a catastrophic-regression floor:
+6-way-overlap speedup at 2 process workers must stay ≥1.25× inline (measured
+1.66× on both builds; an overlap-machinery regression reads ~1.0×), skipped
+on shared macOS runners per the Phase 2 noise findings.
+
 ## Phase 3 — single-run conservative PDES
 
 Every number below is measured by `benchmarks/pdes_scaling.py` (a balanced

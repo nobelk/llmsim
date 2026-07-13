@@ -1,7 +1,8 @@
 # Which parallelism do I need?
 
-llmsim offers three share-nothing strategies. Parallel replications (Phase 2)
-and PDES sharding (Phase 3) are shipping; offload lands in Phase 4.
+llmsim offers three share-nothing strategies, all shipping: parallel
+replications (Phase 2), PDES sharding (Phase 3), and compute offload
+(Phase 4).
 
 ```
 Do you run one model many times (replications, parameter sweeps,
@@ -14,8 +15,9 @@ confidence intervals)?
 └── NO — one single run is too big or too slow?
     │
     ├── One replication is CPU-bound in *computation* (not events)?
-    │   → offload (Phase 4) — hand computations to a worker pool
-    │     without breaking determinism.
+    │   → yield sim.offload(fn, ...) (shipping) — hand computations
+    │     to a worker pool without breaking determinism. Read
+    │     "Offloading computation" below first.
     │
     └── One replication has too many *events* for one core?
         → llmsim.ShardedSim (shipping) — conservative (YAWNS-style)
@@ -62,6 +64,58 @@ matures.
 If you are unsure: replications. Most stochastic studies need confidence
 intervals anyway, and replications parallelize embarrassingly — the whole
 model stays single-threaded, exactly as you wrote it.
+
+## Offloading computation
+
+When one *event handler* is CPU-heavy (a scoring policy, a routing solve, a
+physics step) but the event count is fine, hand the computation to a worker
+pool without leaving the deterministic world:
+
+```python
+from llmsim import OffloadPool, Sim
+
+def dispatcher(sim, fleet):
+    ...
+    # The result arrives exactly at sim.now + 2.0 — a completion slot the
+    # *model* chose — no matter how long the computation takes on the wall
+    # clock. Same trace as running it inline, on any backend.
+    plan = yield sim.offload(score_assignments, snapshot, delay=2.0)
+    ...
+
+sim = Sim(seed=7)
+pool = OffloadPool(sim, backend="auto")   # attach before sim.run()
+...
+sim.run()
+pool.close()                              # or use OffloadPool as a context manager
+```
+
+The rules, in decreasing order of importance:
+
+1. **The payload is a module-level function of its arguments** — validated at
+   submission (lambdas/closures rejected), pickle-preflighted on the process
+   and interpreter backends. Never pass `Sim`-owned mutable state; on the
+   thread backend arguments travel by live reference and debug mode is your
+   guard.
+2. **`delay` is the completion slot, a modeling decision** (like PDES
+   lookahead): the slot must be a pure function of model state. If the
+   computation outlives the slot, the run blocks wall-clock at the slot —
+   correctness never bends, you just wait.
+3. **Speedup comes only from offloads that overlap in simulated time** — the
+   ceiling is max-vs-sum per busy window, measured curves and slowdown
+   regimes (no overlap, cheap payloads, thread-backend caveats, the hung-
+   payload hazard) in [Performance notes](perf-notes.md).
+4. **`strict=False` trades determinism for latency** — results deliver as
+   available (optionally no earlier than `now + delay`); ordering then
+   depends on wall-clock timing, and debug mode flags every such call. A
+   non-strict result is never dropped: `run()` drains outstanding offloads
+   before concluding the schedule is empty.
+5. **Inside an `Experiment` worker, offload defaults to inline** — nested
+   pools are explicit opt-in (`backend="threads"` etc.); process pools
+   inside interpreter workers are rejected (broken upstream).
+
+Interrupting a process that waits on an offload abandons the computation
+(pending work is cancelled; a finished result is discarded, never
+delivered), and `OffloadEvent.cancel()` does the same explicitly.
 
 ## The 80% case
 

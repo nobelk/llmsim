@@ -7,6 +7,8 @@ import this module by name (``tests.parallel_support``); the repo root is on
 ``sys.path`` via pytest's ``pythonpath`` and propagates to spawned workers.
 """
 
+import os
+import random
 import threading
 import time
 from collections.abc import Generator
@@ -14,8 +16,17 @@ from typing import Any
 
 from llmsim.core.events import Event
 from llmsim.core.sim import Sim
-from llmsim.parallel.backends import CancelToken
+from llmsim.parallel.backends import BackendName, CancelToken
 from llmsim.rand.streams import SeedStream
+
+#: The process-body shape the offload test models share.
+Gen = Generator[Event[Any], Any, None]
+
+#: The three pooled backend kinds, shared by the offload suites.
+POOLED_BACKENDS: tuple[BackendName, ...] = ("threads", "interpreters", "processes")
+
+#: The spec's enumerated offload worker counts.
+OFFLOAD_WORKER_COUNTS: tuple[int, ...] = (1, 2, 4, os.process_cpu_count() or 1)
 
 
 def sequential_reference(
@@ -188,3 +199,141 @@ def slow_uncooperative_factory(stream: SeedStream, config: Any) -> dict[str, flo
     time.sleep(0.05)
     sim.run()
     return {"now": sim.now}
+
+
+# --- Offload payloads (Phase 4.1). Plain functions of their arguments only,
+# --- importable by name so every offload backend can transport them.
+
+
+def offload_square(x: float) -> float:
+    """Return ``x`` squared -- the minimal deterministic payload."""
+    return x * x
+
+
+def offload_add(x: float, *, increment: float = 1.0) -> float:
+    """Return ``x + increment``, exercising keyword payload arguments."""
+    return x + increment
+
+
+def offload_fail(message: str) -> float:
+    """Raise ``ValueError(message)`` -- the failing payload."""
+    raise ValueError(message)
+
+
+def offload_identity(value: Any) -> Any:
+    """Return *value* unchanged (thread-backend live-reference checks)."""
+    return value
+
+
+#: Wall-clock jitter for offload payloads is scheduling noise, not simulation
+#: state, so it is deliberately unseeded (mirrors the PDES soak-jitter rule).
+_offload_jitter_rng = random.Random()
+
+
+def offload_jitter_square(x: float) -> float:
+    """Sleep a random few milliseconds, then return ``x`` squared.
+
+    Randomized worker latency must not change any simulated outcome: strict
+    traces with this payload are bitwise-equal to plain ``offload_square``.
+    """
+    time.sleep(_offload_jitter_rng.random() * 0.005)
+    return x * x
+
+
+def offload_slow_square(x: float, seconds: float) -> float:
+    """Sleep *seconds* of wall-clock time, then return ``x`` squared.
+
+    Wall-clock latency must never leak into simulated results (strict mode's
+    core promise), so tests pair this with :func:`offload_square` expecting
+    identical traces.
+    """
+    time.sleep(seconds)
+    return x * x
+
+
+#: Handshake proving an offload payload is mid-execution (see
+#: ``cooperative_started`` above for the pattern's rationale).
+offload_started = threading.Event()
+#: Gate a blocked offload payload waits on, so tests control exactly when a
+#: running payload finishes.
+offload_release = threading.Event()
+
+
+def offload_blocking(x: float) -> float:
+    """Signal :data:`offload_started`, block on :data:`offload_release`, return.
+
+    Tests that need a payload guaranteed to be *running* (not queued) use the
+    started/release pair instead of racing wall-clock timers on slow runners.
+    """
+    offload_started.set()
+    offload_release.wait(timeout=30)
+    return x * x
+
+
+def offload_model_kpis(
+    backend: str, max_workers: int | None, seed: int
+) -> tuple[list[Any], dict[tuple[str, int], tuple[float, float]]]:
+    """Run the canonical offload model; return ``(trace records, outcomes)``.
+
+    The single source of truth for what the offload conformance and
+    equivalence tests execute: staggered processes submit overlapping strict
+    offloads (one wall-clock-slow, to force the block-at-the-slot path) mixed
+    with plain timeouts that tie with completion slots. Identical inputs must
+    produce identical traces and outcomes on every backend and worker count.
+    """
+    from llmsim.parallel.offload import OffloadBackendName, OffloadPool
+    from llmsim.trace import trace
+
+    sim = Sim(seed=seed)
+    outcomes: dict[tuple[str, int], tuple[float, float]] = {}
+
+    def submitter(
+        sim: Sim, name: str, start: float, xs: list[float], slot: float
+    ) -> Generator[Event[Any], Any, None]:
+        yield sim.delay(start)
+        events = [
+            sim.offload(
+                offload_slow_square if index == 0 else offload_square,
+                *((x, 0.02) if index == 0 else (x,)),
+                delay=slot + index,
+            )
+            for index, x in enumerate(xs)
+        ]
+        # A timeout deliberately tied with the first completion slot.
+        yield sim.delay(slot)
+        for index, event in enumerate(events):
+            value = yield event
+            outcomes[(name, index)] = (sim.now, value)
+
+    backend_name: OffloadBackendName = backend  # type: ignore[assignment]
+    with OffloadPool(sim, backend=backend_name, max_workers=max_workers):
+        tracer = trace(sim)
+        sim.spawn(submitter, "a", 0.0, [2.0, 3.0, 4.0], 5.0)
+        sim.spawn(submitter, "b", 1.0, [5.0, 6.0], 5.0)
+        sim.spawn(submitter, "c", 2.5, [7.0], 0.5)
+        sim.run()
+    return tracer.records, outcomes
+
+
+def nested_offload_factory(stream: SeedStream, config: Any) -> tuple[str, float]:
+    """Build a Sim with an OffloadPool inside an Experiment worker.
+
+    ``config`` is ``(offload backend name, x)``. Returns the pool's resolved
+    kind (proving the nested-pool rule: ``"auto"`` resolves to ``"inline"``
+    inside a worker) and ``x**2`` plus a stream draw (so same-seed tests
+    exercise the derived RNG through the offload path).
+    """
+    from llmsim.parallel.offload import OffloadPool
+
+    backend_name, x = config
+    sim = Sim(rng=stream.rng())
+    collected: list[float] = []
+
+    def proc(sim: Sim) -> Gen:
+        value = yield sim.offload(offload_square, float(x), delay=1.0)
+        collected.append(value + sim.rng.random())
+
+    with OffloadPool(sim, backend=backend_name, max_workers=1) as pool:
+        sim.spawn(proc)
+        sim.run()
+        return pool.kind, collected[0]
