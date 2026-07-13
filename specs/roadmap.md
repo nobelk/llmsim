@@ -133,7 +133,7 @@ interpreter-dependent and is asserted when a CPython build demonstrates it.
 
 Goal: round out the parallel story and freeze the API.
 
-- [ ] **4.1 Compute offload** — `parallel/offload.py`: `sim.offload(fn, ...)`
+- [x] **4.1 Compute offload** — `parallel/offload.py`: `sim.offload(fn, ...)`
   with deterministic completion slots (`strict=True` default: block wall-clock
   at the slot), `strict=False` opt-out flagged by debug mode; defined
   failure/cancellation semantics; max-vs-sum ceiling documented.
