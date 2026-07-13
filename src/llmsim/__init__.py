@@ -28,6 +28,19 @@ from llmsim.core.errors import EmptySchedule, Interrupt, SimulationError
 from llmsim.core.events import Event, Timeout
 from llmsim.core.process import Process
 from llmsim.core.sim import Sim
+from llmsim.parallel.backends import (
+    CancelToken,
+    ExecutionBackend,
+    FactoryValidationError,
+    TransportError,
+)
+from llmsim.parallel.replicate import (
+    Experiment,
+    ReplicationError,
+    ReplicationResult,
+    run_replications,
+)
+from llmsim.rand.streams import SeedStream, SeedTree
 from llmsim.resources.container import Container
 from llmsim.resources.resource import (
     PreemptiveResource,
@@ -58,4 +71,16 @@ __all__ = [
     "Store",
     "PriorityStore",
     "FilterStore",
+    # Parallel replications (Phase 2).
+    "Experiment",
+    "ReplicationResult",
+    "ReplicationError",
+    "run_replications",
+    "ExecutionBackend",
+    "CancelToken",
+    "FactoryValidationError",
+    "TransportError",
+    # Deterministic randomness (Phase 2).
+    "SeedTree",
+    "SeedStream",
 ]

@@ -4,8 +4,8 @@ import importlib
 
 import llmsim
 
-# The Phase 1 public import contract from requirements.md. Users depend on
-# every one of these resolving from the top-level package.
+# The public import contract, phase by phase. Users depend on every one of
+# these resolving from the top-level package.
 PHASE_1_PUBLIC_API = frozenset(
     {
         "Sim",
@@ -28,6 +28,24 @@ PHASE_1_PUBLIC_API = frozenset(
     }
 )
 
+# Phase 2: parallel replications + reproducible randomness.
+PHASE_2_PUBLIC_API = frozenset(
+    {
+        "Experiment",
+        "ReplicationResult",
+        "ReplicationError",
+        "run_replications",
+        "ExecutionBackend",
+        "CancelToken",
+        "FactoryValidationError",
+        "TransportError",
+        "SeedTree",
+        "SeedStream",
+    }
+)
+
+PUBLIC_API = PHASE_1_PUBLIC_API | PHASE_2_PUBLIC_API
+
 
 def test_package_imports() -> None:
     """The top-level package imports without side effects."""
@@ -40,13 +58,13 @@ def test_public_api_is_a_list() -> None:
 
 
 def test_all_matches_documented_public_api() -> None:
-    """``__all__`` is exactly the documented Phase 1 contract."""
-    assert set(llmsim.__all__) == PHASE_1_PUBLIC_API
+    """``__all__`` is exactly the documented Phase 1 + Phase 2 contract."""
+    assert set(llmsim.__all__) == PUBLIC_API
 
 
 def test_public_names_resolve() -> None:
     """Every documented public name is importable from the package."""
-    for name in PHASE_1_PUBLIC_API:
+    for name in PUBLIC_API:
         assert hasattr(llmsim, name), f"llmsim.{name} does not resolve"
         assert getattr(llmsim, name) is not None
 
