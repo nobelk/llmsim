@@ -27,7 +27,13 @@ from typing import Any
 
 from llmsim.core.errors import EmptySchedule, SimulationError
 from llmsim.core.events import Event
-from llmsim.core.sim import INFINITY, Sim, _arm_until, _StopSimulation
+from llmsim.core.sim import (
+    INFINITY,
+    Sim,
+    _arm_until,
+    _finish_empty_run,
+    _StopSimulation,
+)
 
 #: Injectable clock seam: tests monkeypatch these (like
 #: ``backends._runtime_gil_enabled``) to drive pacing deterministically.
@@ -100,11 +106,9 @@ def run(
     if factor <= 0:
         raise ValueError(f"factor must be positive, got {factor}")
     if until is not None:
-        armed = _arm_until(sim, until)
-        if armed is None:
-            assert isinstance(until, Event)
-            return until._value
-        until = armed
+        until, early_value = _arm_until(sim, until)
+        if until is None:
+            return early_value
 
     offload = sim._offload
     origin = sim.now
@@ -132,9 +136,4 @@ def run(
     except _StopSimulation as stopped:
         return stopped.args[0]
     except EmptySchedule:
-        if until is not None:
-            raise RuntimeError(
-                f'no scheduled events left but the "until" event was not '
-                f"triggered: {until}"
-            ) from None
-        return None
+        return _finish_empty_run(until)

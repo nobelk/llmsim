@@ -1,5 +1,6 @@
 """Real-time mode: pacing, drift, until parity, offload synergy (4.2)."""
 
+import re
 from typing import Any
 
 import pytest
@@ -75,8 +76,7 @@ class TestPacing:
         for _ in range(5):
             sim.delay(1.0)  # five events at the same simulated time
         rt.run(sim, factor=1.0)
-        assert clock.now_wall == 1.0
-        assert all(s >= 0 for s in clock.sleeps)
+        assert clock.now_wall == 1.0  # FakeClock.sleep rejects negatives
 
     def test_factor_must_be_positive(self, clock: FakeClock) -> None:
         sim = Sim()
@@ -261,8 +261,6 @@ class TestOffloadParity:
         # (up to the stop event's memory address in its repr).
         assert paced_seen == plain_seen == [(0.0, 25.0)]
         assert "was not triggered" in paced_error
-        import re
-
         strip_address = re.compile(r"0x[0-9a-f]+")
         assert strip_address.sub("0x", paced_error) == strip_address.sub(
             "0x", plain_error
