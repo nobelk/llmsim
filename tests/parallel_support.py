@@ -188,3 +188,52 @@ def slow_uncooperative_factory(stream: SeedStream, config: Any) -> dict[str, flo
     time.sleep(0.05)
     sim.run()
     return {"now": sim.now}
+
+
+# --- Offload payloads (Phase 4.1). Plain functions of their arguments only,
+# --- importable by name so every offload backend can transport them.
+
+
+def offload_square(x: float) -> float:
+    """Return ``x`` squared -- the minimal deterministic payload."""
+    return x * x
+
+
+def offload_add(x: float, *, increment: float = 1.0) -> float:
+    """Return ``x + increment``, exercising keyword payload arguments."""
+    return x + increment
+
+
+def offload_fail(message: str) -> float:
+    """Raise ``ValueError(message)`` -- the failing payload."""
+    raise ValueError(message)
+
+
+def offload_slow_square(x: float, seconds: float) -> float:
+    """Sleep *seconds* of wall-clock time, then return ``x`` squared.
+
+    Wall-clock latency must never leak into simulated results (strict mode's
+    core promise), so tests pair this with :func:`offload_square` expecting
+    identical traces.
+    """
+    time.sleep(seconds)
+    return x * x
+
+
+#: Handshake proving an offload payload is mid-execution (see
+#: ``cooperative_started`` above for the pattern's rationale).
+offload_started = threading.Event()
+#: Gate a blocked offload payload waits on, so tests control exactly when a
+#: running payload finishes.
+offload_release = threading.Event()
+
+
+def offload_blocking(x: float) -> float:
+    """Signal :data:`offload_started`, block on :data:`offload_release`, return.
+
+    Tests that need a payload guaranteed to be *running* (not queued) use the
+    started/release pair instead of racing wall-clock timers on slow runners.
+    """
+    offload_started.set()
+    offload_release.wait(timeout=30)
+    return x * x

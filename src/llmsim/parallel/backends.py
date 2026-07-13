@@ -30,11 +30,21 @@ from concurrent.futures import (
     ProcessPoolExecutor,
     ThreadPoolExecutor,
 )
+from contextvars import ContextVar
 from os import process_cpu_count
 from typing import Any, Literal
 
 #: The public backend-selection vocabulary. ``"auto"`` resolves per build.
 BackendName = Literal["auto", "threads", "interpreters", "processes"]
+
+#: The concrete backend kind of the Experiment worker currently executing on
+#: this thread, or ``None`` outside any worker. Set by the replication runner
+#: around the factory call; read by the offload pool's nested-pool rule. A
+#: ``ContextVar`` scopes the flag to the worker's own thread/interpreter, so a
+#: thread-backend coordinator never sees its workers' value.
+_worker_backend: ContextVar[str | None] = ContextVar(
+    "llmsim_worker_backend", default=None
+)
 
 #: Concrete backend kinds, in documentation order.
 _CONCRETE_KINDS = ("threads", "interpreters", "processes")

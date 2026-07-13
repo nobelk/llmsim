@@ -48,6 +48,7 @@ from llmsim.parallel.backends import (
     CancelToken,
     ExecutionBackend,
     TransportError,
+    _worker_backend,
     preflight_config,
     resolve_qualname,
     validate_factory,
@@ -194,6 +195,7 @@ def _run_replication(
     cancel: CancelToken,
     transport: bool,
     spool: bool,
+    backend_kind: str | None = None,
 ) -> Any:
     """Run one replication worker-side and encode its result for transport.
 
@@ -212,10 +214,18 @@ def _run_replication(
     factory = _import_factory(module_name, qualname)
     warn_if_gil_reenabled(module_name, gil_before, sys._is_gil_enabled())
 
-    if accepts_cancel:
-        value = factory(stream, config, cancel)
-    else:
-        value = factory(stream, config)
+    # Mark this context as a replication worker of the given backend kind, so
+    # an OffloadPool the factory builds resolves backend="auto" to inline (the
+    # nested-pool rule) instead of oversubscribing nproc x nproc workers.
+    token = _worker_backend.set(backend_kind) if backend_kind is not None else None
+    try:
+        if accepts_cancel:
+            value = factory(stream, config, cancel)
+        else:
+            value = factory(stream, config)
+    finally:
+        if token is not None:
+            _worker_backend.reset(token)
     return _encode_payload(value, stream, transport=transport, spool=spool)
 
 
@@ -351,6 +361,7 @@ class Experiment:
                     worker_token,
                     backend_obj.requires_transport,
                     self.spool,
+                    backend_obj.kind,
                 )
                 futures[future] = (config_index, replication_index)
                 future.add_done_callback(completion_queue.put)

@@ -208,4 +208,7 @@ class _Interruption(Event[None]):
         target = self.process._target
         if target is not None and target.callbacks is not None:
             target.callbacks.remove(self.process._resume)
+            # Let the event react to losing a waiter (an offload abandons its
+            # pending computation once no real waiter remains).
+            target._waiter_unhooked()
         self.process._resume(self)

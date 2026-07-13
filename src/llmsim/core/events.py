@@ -164,6 +164,15 @@ class Event(Generic[T]):
         self._sim.schedule(self)
         return self
 
+    def _waiter_unhooked(self) -> None:
+        """React to an interrupt unhooking a process waiting on this event.
+
+        A no-op for ordinary events. Subclasses whose result exists only for
+        their waiters (an offload's completion event) override this to abandon
+        the pending work once no real waiter remains -- see
+        ``llmsim.parallel.offload.OffloadEvent``.
+        """
+
     def __await__(self) -> Generator["Event[T]", Any, T]:
         """Yield ``self`` exactly once, then return the resolved value.
 

@@ -34,6 +34,11 @@ from llmsim.parallel.backends import (
     FactoryValidationError,
     TransportError,
 )
+from llmsim.parallel.offload import (
+    NonStrictOffloadWarning,
+    OffloadEvent,
+    OffloadPool,
+)
 from llmsim.parallel.pdes import (
     LookaheadError,
     ShardedSim,
@@ -96,4 +101,8 @@ __all__ = [
     "ShardError",
     "TopologyError",
     "LookaheadError",
+    # Compute offload (Phase 4).
+    "OffloadPool",
+    "OffloadEvent",
+    "NonStrictOffloadWarning",
 ]

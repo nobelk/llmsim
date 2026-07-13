@@ -55,7 +55,18 @@ PHASE_3_PUBLIC_API = frozenset(
     }
 )
 
-PUBLIC_API = PHASE_1_PUBLIC_API | PHASE_2_PUBLIC_API | PHASE_3_PUBLIC_API
+# Phase 4: compute offload.
+PHASE_4_PUBLIC_API = frozenset(
+    {
+        "OffloadPool",
+        "OffloadEvent",
+        "NonStrictOffloadWarning",
+    }
+)
+
+PUBLIC_API = (
+    PHASE_1_PUBLIC_API | PHASE_2_PUBLIC_API | PHASE_3_PUBLIC_API | PHASE_4_PUBLIC_API
+)
 
 
 def test_package_imports() -> None:
@@ -69,7 +80,7 @@ def test_public_api_is_a_list() -> None:
 
 
 def test_all_matches_documented_public_api() -> None:
-    """``__all__`` is exactly the documented Phase 1-3 contract."""
+    """``__all__`` is exactly the documented Phase 1-4 contract."""
     assert set(llmsim.__all__) == PUBLIC_API
 
 
