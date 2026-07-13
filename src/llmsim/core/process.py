@@ -129,6 +129,18 @@ class Process(Event[T]):
                     f"{self} yielded {new_event!r}, which is not an event"
                 ) from None
 
+            if new_event._sim is not self._sim:
+                # Mixing Sims is always a bug (SimPy raises here too), and in
+                # a sharded run it is a data race no debug guard can catch
+                # deterministically: the foreign event's state is read and
+                # mutated cross-thread. Reject at the seam instead.
+                raise RuntimeError(
+                    f"{self._desc()} yielded an event owned by a different "
+                    f"Sim; a process may only wait on events of its own "
+                    f"simulation (cross-shard interaction is message-passing "
+                    f"only)"
+                )
+
             self._target = new_event
             if callbacks is not None:
                 # Not yet processed: resume once it is.

@@ -5,7 +5,13 @@ import random
 
 import pytest
 
-from llmsim.rand.streams import SeedTree, canonical_seed_path, child_seed
+from llmsim.rand.streams import (
+    SeedTree,
+    canonical_seed_path,
+    canonical_shard_path,
+    child_seed,
+    shard_seed,
+)
 
 #: The reference master seed used across this module's known-answer pins.
 _MASTER = 20260712
@@ -34,6 +40,45 @@ def test_child_seed_fits_128_bits() -> None:
         for replication_index in range(4):
             seed = child_seed(_MASTER, config_index, replication_index)
             assert 0 <= seed < 2**128
+
+
+# --- PDES shard path (Phase 3): domain-separated, co-existing with v1. -------
+
+
+def test_canonical_shard_path_known_answers() -> None:
+    assert canonical_shard_path(_MASTER, 0) == b"llmsim.seed.v1:20260712:pdes:0"
+    assert canonical_shard_path(0, 0) == b"llmsim.seed.v1:0:pdes:0"
+
+
+def test_shard_seed_known_answers() -> None:
+    assert shard_seed(_MASTER, 0) == 334202005990587960262292533445521233743
+    assert shard_seed(_MASTER, 3) == 237019513589358956254706257059904111098
+    assert shard_seed(0, 0) == 171226815192387624239564315926334048561
+
+
+def test_shard_path_never_collides_with_replication_path() -> None:
+    """The literal 'pdes' segment cannot equal a decimal config index."""
+    replication_seeds = {
+        child_seed(_MASTER, config_index, replication_index)
+        for config_index in range(50)
+        for replication_index in range(50)
+    }
+    pdes_seeds = {shard_seed(_MASTER, shard_index) for shard_index in range(500)}
+    assert len(pdes_seeds) == 500
+    assert not (pdes_seeds & replication_seeds)
+
+
+def test_shard_seed_validation() -> None:
+    with pytest.raises(ValueError, match="shard_index"):
+        shard_seed(_MASTER, -1)
+    with pytest.raises(TypeError, match="master_seed"):
+        canonical_shard_path("7", 0)  # type: ignore[arg-type]
+
+
+def test_tree_shard_rng_matches_module_function() -> None:
+    tree = SeedTree(_MASTER)
+    assert tree.shard_seed(4) == shard_seed(_MASTER, 4)
+    assert tree.shard_rng(4).random() == random.Random(shard_seed(_MASTER, 4)).random()
 
 
 # --- Stability: same triple -> same pinned first-N draws, across runs, ------

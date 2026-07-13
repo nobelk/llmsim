@@ -1,7 +1,7 @@
 # Which parallelism do I need?
 
-llmsim offers three share-nothing strategies. As of Phase 2 the flagship —
-**parallel replications** — is shipping; offload and PDES land in Phases 3–4.
+llmsim offers three share-nothing strategies. Parallel replications (Phase 2)
+and PDES sharding (Phase 3) are shipping; offload lands in Phase 4.
 
 ```
 Do you run one model many times (replications, parameter sweeps,
@@ -18,9 +18,46 @@ confidence intervals)?
     │     without breaking determinism.
     │
     └── One replication has too many *events* for one core?
-        → PDES sharding (Phase 3) — conservative (YAWNS-style)
-          partitioning of a single model across cores.
+        → llmsim.ShardedSim (shipping) — conservative (YAWNS-style)
+          partitioning of a single model across cores. Read the
+          "Should I shard?" checklist below first.
 ```
+
+## Should I shard? (PDES)
+
+Sharding is an explicit modeling decision, not a flag. Work through this
+checklist — every "no" costs real speedup:
+
+1. **Can you partition the model so shards interact only by messages** with a
+   known minimum delay (the *lookahead*)? Shards cannot share `Resource`s,
+   `Store`s, or events — miswiring is rejected at construction, yielding
+   another shard's event is rejected by the process driver in every mode,
+   and the debug mode (`ShardedSim(..., debug=True)` / `LLMSIM_DEBUG=1`)
+   catches objects smuggled through closures or payloads at runtime.
+2. **Is the lookahead a large multiple of the mean event spacing?** The
+   synchronizer advances one safe window per barrier round; with lookahead
+   near the event spacing the run is barrier-dominated and *slower* than
+   sequential (measured curve in [Performance notes](perf-notes.md)).
+3. **Are the shards balanced?** The window cost is the busiest shard's.
+4. **Check before you build:** run your unpartitioned model with a tracer,
+   then `llmsim.parallel.pdes.analyze(traces, lookahead=...)` — it reports
+   the balance ceiling and a window-model speedup estimate from the trace
+   alone.
+
+The correctness guarantee is unconditional: a threaded `topo.run()` is
+bitwise trace-equivalent to the same topology's sequential reference
+(`topo.run(mode="sequential")`), for the same `master_seed`, at any shard
+count — enforced by the equivalence suite and a jittered soak job in CI.
+Results are deterministic per fixed topology; a *different* partition is a
+different (equally deterministic) model, because shard streams derive from
+the domain-separated seed path.
+
+Honest performance status (2026-07, CPython 3.14.2t): thread-parallel DES is
+currently capped near ~1.1× by interpreter-level contention (see
+[Performance notes](perf-notes.md)); on GIL builds PDES runs correct but
+time-sliced, with a prominent runtime warning. Shard for *scale* today
+(models too big for one heap), and for speed as free-threaded CPython
+matures.
 
 If you are unsure: replications. Most stochastic studies need confidence
 intervals anyway, and replications parallelize embarrassingly — the whole

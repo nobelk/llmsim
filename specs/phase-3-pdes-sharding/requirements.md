@@ -151,12 +151,17 @@ currently anti-scale across threads on CPython 3.14.2t.
   the only synchronized structures are the per-channel mailboxes.
   Enforcement: (a) **construction-time structural validation** rejects a
   shard builder wiring another shard's `Resource`/`Store`/`Event`/`Process`
-  where detectable; (b) **runtime debug-mode assertions** — Phase 1's
-  owner-thread guard on `Sim.schedule()` — catch what construction cannot
-  see (foreign objects smuggled via closures, module globals, or message
-  payloads), and the soak job runs with debug assertions on so
-  schedule-dependent escapes surface in CI. Message payloads should be plain
-  data; sending a `Sim`-owned object is documented as unsupported and is
-  caught by the debug guard when the receiving shard touches it.
+  where detectable; (b) **the process driver rejects cross-`Sim` yields
+  outright** — yielding an event owned by a different `Sim` raises
+  deterministically in every mode, debug or not (SimPy-faithful; implemented
+  during Phase 3 because the debug guard provably cannot catch this class:
+  the foreign event's state is read cross-thread and one interleaving
+  resumes the process locally and silently); (c) **runtime debug-mode
+  assertions** — Phase 1's owner-thread guard on `Sim.schedule()` — catch
+  the remaining escapes (foreign objects smuggled via closures, module
+  globals, or message payloads), and the soak job runs with debug assertions
+  on so schedule-dependent escapes surface in CI. Message payloads should be
+  plain data; sending a `Sim`-owned object is documented as unsupported and
+  is caught by the debug guard when the receiving shard touches it.
 - **Stdlib-only** — `threading` (`Lock`, `Barrier`), `collections.deque`,
   `heapq`; no new dependencies.

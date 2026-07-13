@@ -1,5 +1,72 @@
 # Performance notes
 
+## Phase 3 — single-run conservative PDES
+
+Every number below is measured by `benchmarks/pdes_scaling.py` (a balanced
+serpentine grid conveyor, ~410k events, full `topo.run()` wall clock including
+barriers, vs the sequential reference runner). Machine: Apple M5 (4P+6E),
+macOS, CPython 3.14.2t unless noted. **Correctness is unconditional** — the
+bitwise trace-equivalence suite gates every build; the numbers here are the
+honest performance record.
+
+### Measured shard scaling (3.14.2t, lookahead = segment transit)
+
+| Shards | Speedup vs sequential reference |
+|---:|---:|
+| 1 | 1.06× |
+| 2 | 1.10× |
+| 4 | 0.95× |
+| 8 | 0.45× |
+
+**Status of the ≥3×-at-8-shards roadmap figure: not demonstrated on current
+interpreters, as the Phase 3 spec anticipated.** PDES shards are threads
+running the Phase 1 engine hot loop concurrently, and CPython 3.14.2t's
+reference-count contention on shared objects (measured in Phase 2, below)
+caps thread-parallel DES at ~1.1× regardless of the synchronizer's quality.
+The figure is recorded as interpreter-dependent and will be asserted when a
+CPython build scales pure-Python event loops across threads. GIL build for
+comparison: 0.90× at 2 shards — correct, time-sliced, prominently warned,
+exactly as documented.
+
+### Lookahead degradation (4-shard ring, local event spacing 0.25)
+
+| Lookahead / spacing | Wall clock vs L=4× sequential |
+|---:|---:|
+| 4× | 0.10× |
+| 2× | 0.05× |
+| 1× | 0.02× |
+| 0.5× | 0.01× |
+| 0.25× | 0.01× |
+
+The textbook conservative-PDES slowdown regime: the horizon advances at most
+one lookahead per round, so **halving lookahead doubles the number of barrier
+rounds** — the measured wall clock doubles down the whole sweep. With
+lookahead at or below the mean event spacing, a sharded run is dominated by
+synchronization and is strictly slower than sequential. Use
+`llmsim.parallel.pdes.analyze()` on a sequential trace to estimate the window
+economics *before* partitioning.
+
+### Slowdown regimes (PDES-specific)
+
+- **Low lookahead** — see the sweep above; lookahead must be a large multiple
+  of the mean event spacing for windows to carry meaningful work.
+- **Unbalanced shards** — the window cost is the busiest shard's; a 90/10
+  split caps speedup at ~1.1× no matter the core count (`analyze()` reports
+  this as `balance_speedup`).
+- **GIL builds** — time-sliced threads: correct, warned at runtime, never
+  faster than sequential.
+- **3.14.2t thread contention** — the same interpreter-level ceiling as
+  Phase 2's thread backend (next section); today this dominates every other
+  regime on free-threaded builds.
+
+### CI gate
+
+Correctness gates are strict (bitwise equivalence at 1/2/4/8 shards, the
+jittered soak job). The only enforced timing assertion
+(`benchmarks/test_pdes_scaling.py`) is a catastrophic-regression floor: a
+2-shard run must stay ≥0.5× sequential (measured 1.10× on 3.14t, 0.90× on the
+GIL build), skipped on shared macOS runners per the Phase 2 noise findings.
+
 ## Phase 2 — parallel replications
 
 Every number below is measured by `benchmarks/replication_scaling.py`

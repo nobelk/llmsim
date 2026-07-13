@@ -34,6 +34,13 @@ from llmsim.parallel.backends import (
     FactoryValidationError,
     TransportError,
 )
+from llmsim.parallel.pdes import (
+    LookaheadError,
+    ShardedSim,
+    ShardError,
+    ShardPorts,
+    TopologyError,
+)
 from llmsim.parallel.replicate import (
     Experiment,
     ReplicationError,
@@ -83,4 +90,10 @@ __all__ = [
     # Deterministic randomness (Phase 2).
     "SeedTree",
     "SeedStream",
+    # Single-run conservative PDES (Phase 3).
+    "ShardedSim",
+    "ShardPorts",
+    "ShardError",
+    "TopologyError",
+    "LookaheadError",
 ]

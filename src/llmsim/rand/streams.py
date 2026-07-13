@@ -65,16 +65,53 @@ def canonical_seed_path(
     )
 
 
+def _derive_seed(path: bytes) -> int:
+    """Apply the one normative digest-truncation: SHA-256, 16 bytes, big-endian.
+
+    Shared by every canonical path so the truncation convention -- itself a
+    pinned wire-format detail -- has exactly one implementation.
+    """
+    return int.from_bytes(hashlib.sha256(path).digest()[:_SEED_BYTES], "big")
+
+
 def child_seed(master_seed: int, config_index: int, replication_index: int) -> int:
     """Derive the 128-bit child seed for one ``(config, replication)`` triple.
 
     ``SHA-256`` of the canonical path, truncated to its first 16 bytes and
     read big-endian. Deterministic and platform-independent by construction.
     """
-    digest = hashlib.sha256(
+    return _derive_seed(
         canonical_seed_path(master_seed, config_index, replication_index)
-    ).digest()
-    return int.from_bytes(digest[:_SEED_BYTES], "big")
+    )
+
+
+def canonical_shard_path(master_seed: int, shard_index: int) -> bytes:
+    """Return the fixed serialization of a PDES shard's seed path.
+
+    The format is ``b"llmsim.seed.v1:<master_seed>:pdes:<shard_index>"`` --
+    a co-existing, domain-separated variant of the replication path (Phase 3
+    requirements). The literal ``pdes`` segment can never collide with the
+    replication path's decimal ``config_index`` segment, so the same master
+    seed safely feeds both an ``Experiment`` and a ``ShardedSim``. Pinned by
+    known-answer tests like the v1 replication path; never mutate in place.
+
+    Raises:
+        TypeError: if *master_seed* is not an ``int``.
+        ValueError: if *shard_index* is negative.
+    """
+    _require_int_master_seed(master_seed)
+    if shard_index < 0:
+        raise ValueError(f"shard_index must be >= 0, got {shard_index}")
+    return f"{_PATH_VERSION}:{master_seed}:pdes:{shard_index}".encode("ascii")
+
+
+def shard_seed(master_seed: int, shard_index: int) -> int:
+    """Derive the 128-bit child seed for one PDES shard.
+
+    Same truncation convention as :func:`child_seed`: SHA-256 of the
+    canonical shard path, first 16 bytes, big-endian.
+    """
+    return _derive_seed(canonical_shard_path(master_seed, shard_index))
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +172,14 @@ class SeedTree:
     def rng(self, config_index: int, replication_index: int) -> random.Random:
         """Return a fresh ``random.Random`` for one triple (the Sim seam)."""
         return random.Random(self.child_seed(config_index, replication_index))
+
+    def shard_seed(self, shard_index: int) -> int:
+        """Derive the 128-bit seed for one PDES shard (domain-separated)."""
+        return shard_seed(self.master_seed, shard_index)
+
+    def shard_rng(self, shard_index: int) -> random.Random:
+        """Return a fresh ``random.Random`` for one PDES shard."""
+        return random.Random(self.shard_seed(shard_index))
 
     def __repr__(self) -> str:
         """Show the master seed for debugging."""
