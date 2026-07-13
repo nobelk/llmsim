@@ -7,6 +7,7 @@ import this module by name (``tests.parallel_support``); the repo root is on
 ``sys.path`` via pytest's ``pythonpath`` and propagates to spawned workers.
 """
 
+import random
 import threading
 import time
 from collections.abc import Generator
@@ -212,6 +213,21 @@ def offload_fail(message: str) -> float:
 def offload_identity(value: Any) -> Any:
     """Return *value* unchanged (thread-backend live-reference checks)."""
     return value
+
+
+#: Wall-clock jitter for offload payloads is scheduling noise, not simulation
+#: state, so it is deliberately unseeded (mirrors the PDES soak-jitter rule).
+_offload_jitter_rng = random.Random()
+
+
+def offload_jitter_square(x: float) -> float:
+    """Sleep a random few milliseconds, then return ``x`` squared.
+
+    Randomized worker latency must not change any simulated outcome: strict
+    traces with this payload are bitwise-equal to plain ``offload_square``.
+    """
+    time.sleep(_offload_jitter_rng.random() * 0.005)
+    return x * x
 
 
 def offload_slow_square(x: float, seconds: float) -> float:
