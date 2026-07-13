@@ -5,9 +5,9 @@ import os
 import pytest
 
 from llmsim import Experiment, ReplicationError
-from llmsim.parallel.backends import _worker_backend
-from llmsim.parallel.offload import OffloadPool
 from llmsim.core.sim import Sim
+from llmsim.parallel.backends import BackendName, _worker_backend
+from llmsim.parallel.offload import OffloadPool
 from tests.parallel_support import (
     nested_auto_offload_factory,
     nested_processes_offload_factory,
@@ -17,7 +17,7 @@ from tests.parallel_support import (
 
 _MASTER = 20260712
 
-_POOLED_BACKENDS = ("threads", "interpreters", "processes")
+_POOLED_BACKENDS: tuple[BackendName, ...] = ("threads", "interpreters", "processes")
 
 #: The spec's enumerated worker counts.
 _WORKER_COUNTS = (1, 2, 4, os.process_cpu_count() or 1)
@@ -26,7 +26,8 @@ _WORKER_COUNTS = (1, 2, 4, os.process_cpu_count() or 1)
 @pytest.fixture(scope="module")
 def inline_reference() -> tuple[object, object]:
     """The sequential reference every pooled run must match bitwise."""
-    return offload_model_kpis("inline", None, _MASTER)
+    records, outcomes = offload_model_kpis("inline", None, _MASTER)
+    return records, outcomes
 
 
 class TestBackendConformance:
@@ -63,10 +64,10 @@ class TestNestedPoolRule:
     """Offload inside Experiment workers: inline by default, opt-in pooled."""
 
     @pytest.mark.parametrize("backend", _POOLED_BACKENDS)
-    def test_auto_resolves_to_inline_inside_workers(self, backend: str) -> None:
-        results = Experiment(
-            nested_auto_offload_factory, [3], master_seed=_MASTER
-        ).run(replications=2, backend=backend, max_workers=2)  # type: ignore[arg-type]
+    def test_auto_resolves_to_inline_inside_workers(self, backend: BackendName) -> None:
+        results = Experiment(nested_auto_offload_factory, [3], master_seed=_MASTER).run(
+            replications=2, backend=backend, max_workers=2
+        )
         for result in results.values():
             kind, _value = result.value
             assert kind == "inline"
@@ -81,11 +82,11 @@ class TestNestedPoolRule:
 
     @pytest.mark.parametrize("backend", ("threads", "processes"))
     def test_explicit_threads_opt_in_works_inside_workers(
-        self, backend: str
+        self, backend: BackendName
     ) -> None:
         results = Experiment(
             nested_threads_offload_factory, [4], master_seed=_MASTER
-        ).run(replications=1, backend=backend, max_workers=2)  # type: ignore[arg-type]
+        ).run(replications=1, backend=backend, max_workers=2)
         assert [r.value for r in results.values()] == [16.0]
 
     def test_explicit_processes_opt_in_works_inside_process_workers(self) -> None:
@@ -96,22 +97,23 @@ class TestNestedPoolRule:
 
     def test_processes_offload_rejected_inside_interpreter_workers(self) -> None:
         with pytest.raises(ReplicationError, match="subinterpreter"):
-            Experiment(
-                nested_processes_offload_factory, [4], master_seed=_MASTER
-            ).run(replications=1, backend="interpreters", max_workers=1)
+            Experiment(nested_processes_offload_factory, [4], master_seed=_MASTER).run(
+                replications=1, backend="interpreters", max_workers=1
+            )
 
     def test_same_seed_same_results_with_nested_offloads(self) -> None:
         """Offloads inside Experiment replications keep the Phase 2 guarantee."""
+        combos: tuple[tuple[BackendName, int], ...] = (
+            ("threads", 1),
+            ("threads", 4),
+            ("processes", 2),
+            ("interpreters", 2),
+        )
         runs = [
             Experiment(nested_auto_offload_factory, [3, 5], master_seed=_MASTER).run(
                 replications=3, backend=backend, max_workers=workers
-            )  # type: ignore[arg-type]
-            for backend, workers in (
-                ("threads", 1),
-                ("threads", 4),
-                ("processes", 2),
-                ("interpreters", 2),
             )
+            for backend, workers in combos
         ]
         first = runs[0]
         for other in runs[1:]:

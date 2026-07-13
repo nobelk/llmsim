@@ -209,6 +209,11 @@ def offload_fail(message: str) -> float:
     raise ValueError(message)
 
 
+def offload_identity(value: Any) -> Any:
+    """Return *value* unchanged (thread-backend live-reference checks)."""
+    return value
+
+
 def offload_slow_square(x: float, seconds: float) -> float:
     """Sleep *seconds* of wall-clock time, then return ``x`` squared.
 
@@ -239,7 +244,9 @@ def offload_blocking(x: float) -> float:
     return x * x
 
 
-def offload_model_kpis(backend: str, max_workers: int | None, seed: int) -> Any:
+def offload_model_kpis(
+    backend: str, max_workers: int | None, seed: int
+) -> tuple[list[Any], dict[tuple[str, int], tuple[float, float]]]:
     """Run the canonical offload model; return ``(trace records, outcomes)``.
 
     The single source of truth for what the offload conformance and

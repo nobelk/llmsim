@@ -16,12 +16,17 @@ from llmsim import (
     Timeout,
 )
 from llmsim.core.errors import Interrupt
-from llmsim.parallel.backends import FactoryValidationError
+from llmsim.parallel.backends import FactoryValidationError, TransportError
 from llmsim.trace import trace
 from tests.parallel_support import (
     offload_add,
+    offload_blocking,
     offload_fail,
+    offload_identity,
+    offload_release,
+    offload_slow_square,
     offload_square,
+    offload_started,
 )
 
 #: The process-body shape every inline test model uses.
@@ -321,6 +326,167 @@ class TestCancellation:
             pass
         with pytest.raises(RuntimeError, match="closed"):
             sim.offload(offload_square, 2.0, delay=1.0)
+
+
+class TestPooledFailure:
+    """Failures cross every backend's boundary and land at the slot."""
+
+    @pytest.mark.parametrize("backend", ["threads", "interpreters", "processes"])
+    def test_exception_delivered_at_slot_on_every_backend(self, backend: str) -> None:
+        sim = Sim()
+        seen: list[tuple[float, str]] = []
+
+        def waiter(sim: Sim) -> Gen:
+            try:
+                yield sim.offload(offload_fail, "boom", delay=4.0)
+            except ValueError as error:
+                seen.append((sim.now, str(error)))
+
+        with OffloadPool(sim, backend=backend, max_workers=1):  # type: ignore[arg-type]
+            sim.spawn(waiter)
+            sim.run()
+        assert seen == [(4.0, "boom")]
+
+    def test_unwaited_pooled_failure_crashes_at_slot(self) -> None:
+        sim = Sim()
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            sim.offload(offload_fail, "boom", delay=2.0)
+            with pytest.raises(ValueError, match="boom"):
+                sim.run()
+            assert sim.now == 2.0
+
+    def test_unpicklable_args_rejected_on_transport_backends(self) -> None:
+        sim = Sim()
+        with OffloadPool(sim, backend="processes", max_workers=1):
+            with pytest.raises(TransportError, match="cannot be pickled"):
+                sim.offload(offload_square, lambda: 1, delay=1.0)
+
+    def test_unpicklable_args_accepted_on_thread_backend(self) -> None:
+        """The thread backend passes args by reference: no pickle preflight."""
+        sim = Sim()
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            event = sim.offload(offload_identity, object(), delay=1.0)
+        assert event is not None
+
+
+class TestPooledNonStrict:
+    """Non-strict pooled delivery: post-step poll, lower bound, run-end drain."""
+
+    def test_run_end_drain_delivers_before_empty_schedule(self) -> None:
+        """A non-strict result is never dropped when the schedule empties."""
+        sim = Sim()
+        seen: list[tuple[float, float]] = []
+
+        def waiter(sim: Sim) -> Gen:
+            value = yield sim.offload(offload_slow_square, 3.0, 0.05, strict=False)
+            seen.append((sim.now, value))
+
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            sim.spawn(waiter)
+            sim.run()
+        assert seen == [(0.0, 9.0)]
+
+    def test_lower_bound_pins_earliest_delivery_time(self) -> None:
+        sim = Sim()
+        seen: list[tuple[float, float]] = []
+
+        def waiter(sim: Sim) -> Gen:
+            value = yield sim.offload(offload_square, 3.0, delay=50.0, strict=False)
+            seen.append((sim.now, value))
+
+        def ticker(sim: Sim) -> Gen:
+            for _ in range(100):
+                yield sim.delay(1.0)
+
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            sim.spawn(waiter)
+            sim.spawn(ticker)
+            sim.run()
+        assert seen == [(50.0, 9.0)]
+
+    def test_poll_delivers_between_steps_while_time_advances(self) -> None:
+        """A completed future is observed by the owning thread mid-run."""
+        sim = Sim()
+        seen: list[tuple[float, float]] = []
+
+        def waiter(sim: Sim) -> Gen:
+            value = yield sim.offload(offload_slow_square, 3.0, 0.02, strict=False)
+            seen.append((sim.now, value))
+
+        def slow_ticker(sim: Sim) -> Gen:
+            import time
+
+            for _ in range(200):
+                yield sim.delay(1.0)
+                time.sleep(0.001)
+
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            sim.spawn(waiter)
+            sim.spawn(slow_ticker)
+            sim.run()
+        assert len(seen) == 1
+        delivered_at, value = seen[0]
+        assert value == 9.0
+        # Delivered mid-run by the post-step poll, not by the run-end drain.
+        assert 0.0 < delivered_at < 200.0
+
+
+class TestPooledCancellation:
+    """Interrupts and shutdown abandon pooled work without deadlocking."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_handshakes(self) -> Generator[None, None, None]:
+        offload_started.clear()
+        offload_release.clear()
+        yield
+        offload_release.set()
+
+    def test_interrupt_abandons_a_running_payload_without_blocking(self) -> None:
+        sim = Sim()
+        seen: list[str] = []
+
+        def waiter(sim: Sim) -> Gen:
+            try:
+                yield sim.offload(offload_blocking, 3.0, delay=10.0)
+            except Interrupt:
+                seen.append("interrupted")
+
+        def interruptor(sim: Sim, target: Process[Any]) -> Gen:
+            yield sim.delay(1.0)
+            target.interrupt()
+
+        with OffloadPool(sim, backend="threads", max_workers=1) as pool:
+            target = sim.spawn(waiter)
+            sim.spawn(interruptor, target)
+            # The run must reach t=10 without blocking on the still-running
+            # payload: the abandoned slot resolves to None immediately.
+            sim.run()
+            assert sim.now == 10.0
+            assert seen == ["interrupted"]
+            offload_release.set()
+        assert pool._closed
+
+    def test_cancel_before_start_cancels_the_future(self) -> None:
+        sim = Sim()
+        with OffloadPool(sim, backend="threads", max_workers=1):
+            first = sim.offload(offload_blocking, 2.0, delay=5.0)
+            queued = sim.offload(offload_square, 3.0, delay=5.0)
+            assert offload_started.wait(timeout=30)
+            assert isinstance(queued, OffloadEvent)
+            queued.cancel()
+            assert queued._future is not None
+            assert queued._future.cancelled()
+            offload_release.set()
+            assert sim.run(until=first) == 4.0
+
+    def test_close_with_in_flight_work_returns_cleanly(self) -> None:
+        sim = Sim()
+        pool = OffloadPool(sim, backend="threads", max_workers=1)
+        sim.offload(offload_blocking, 3.0, delay=10.0)
+        assert offload_started.wait(timeout=30)
+        offload_release.set()
+        pool.close()  # running payload finishes; its result is discarded
+        assert pool._closed
 
 
 class TestRunUntil:
