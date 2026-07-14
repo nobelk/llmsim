@@ -45,6 +45,7 @@ class _Machine:
         self.broken = False
         self.process = env.process(self._work())
         env.process(self._break())
+
     # --8<-- [end:init]
 
     # --8<-- [start:work]
@@ -64,6 +65,7 @@ class _Machine:
                         yield repair
                         yield self.env.timeout(REPAIR_TIME)
                     self.broken = False
+
     # --8<-- [end:work]
 
     # --8<-- [start:break]
@@ -72,6 +74,7 @@ class _Machine:
             yield self.env.timeout(self.rng.expovariate(1.0 / MEAN_TIME_TO_FAILURE))
             if not self.broken:
                 self.process.interrupt()
+
     # --8<-- [end:break]
 
 

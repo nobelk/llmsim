@@ -51,9 +51,7 @@ def _parse_guide(guide_text: str) -> tuple[list[Snippet], list[int]]:
             assert index < len(lines), (
                 f"unterminated Python fence at guide line {fence_line + 1}"
             )
-            marker = (
-                SNIPPET_MARKER.match(lines[fence_line - 1]) if fence_line else None
-            )
+            marker = SNIPPET_MARKER.match(lines[fence_line - 1]) if fence_line else None
             if marker is None:
                 unmarked_fence_lines.append(fence_line + 1)
             else:
@@ -76,27 +74,31 @@ def _source_lines(source_path: Path) -> tuple[str, ...]:
 
 
 def _extract_region(source_path: Path, region: str) -> str:
-    """Return the dedented text between a region's start/end markers."""
+    """Return the dedented text between a region's start/end markers.
+
+    Blank edge lines are ignored so the code formatter may pad around the
+    marker comments without changing the excerpt.
+    """
     source_lines = _source_lines(source_path)
 
     def unique_marker_line(marker: str) -> int:
         matches = [
-            number
-            for number, line in enumerate(source_lines)
-            if line.strip() == marker
+            number for number, line in enumerate(source_lines) if line.strip() == marker
         ]
         assert len(matches) == 1, (
-            f"expected exactly one {marker!r} in {source_path}, "
-            f"found {len(matches)}"
+            f"expected exactly one {marker!r} in {source_path}, found {len(matches)}"
         )
         return matches[0]
 
     start = unique_marker_line(f"# --8<-- [start:{region}]")
     end = unique_marker_line(f"# --8<-- [end:{region}]")
-    assert start < end, (
-        f"region {region!r} markers are out of order in {source_path}"
-    )
-    return textwrap.dedent("\n".join(source_lines[start + 1 : end]))
+    assert start < end, f"region {region!r} markers are out of order in {source_path}"
+    region_lines = list(source_lines[start + 1 : end])
+    while region_lines and not region_lines[0].strip():
+        del region_lines[0]
+    while region_lines and not region_lines[-1].strip():
+        del region_lines[-1]
+    return textwrap.dedent("\n".join(region_lines))
 
 
 GUIDE_TEXT = GUIDE_PATH.read_text(encoding="utf-8")

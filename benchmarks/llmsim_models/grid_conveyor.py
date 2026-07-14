@@ -61,6 +61,7 @@ def run_grid_conveyor(
                 yield sim.delay(SEGMENT_TRANSIT)
         total_transit += sim.now - entered_at
         delivered += 1
+
     # --8<-- [end:item]
 
     # --8<-- [start:feeder]
@@ -68,6 +69,7 @@ def run_grid_conveyor(
         for _ in range(num_items):
             yield sim.delay(rng.expovariate(1.0 / ARRIVAL_INTERVAL_MEAN))
             sim.spawn(item)
+
     # --8<-- [end:feeder]
 
     # --8<-- [start:run]

@@ -58,9 +58,7 @@ REQUIRED_INVENTORY: frozenset[str] = frozenset(
 # keeps this mapping in sync with the suite's modules, each of which must
 # carry a provenance note naming its SimPy 3 original.
 BEHAVIORAL_EXERCISED: dict[str, frozenset[str]] = {
-    "test_condition.py": frozenset(
-        {"simpy.Condition", "simpy.AllOf", "simpy.AnyOf"}
-    ),
+    "test_condition.py": frozenset({"simpy.Condition", "simpy.AllOf", "simpy.AnyOf"}),
     "test_environment.py": frozenset({"simpy.Environment", "env.now", "env.run"}),
     "test_event.py": frozenset({"simpy.Event", "env.event"}),
     "test_exceptions.py": frozenset({"defused"}),

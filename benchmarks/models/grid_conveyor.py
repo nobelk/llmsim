@@ -62,6 +62,7 @@ def run_grid_conveyor(
                 yield env.timeout(SEGMENT_TRANSIT)
         total_transit += env.now - entered_at
         delivered += 1
+
     # --8<-- [end:item]
 
     # --8<-- [start:feeder]
@@ -69,6 +70,7 @@ def run_grid_conveyor(
         for _ in range(num_items):
             yield env.timeout(rng.expovariate(1.0 / ARRIVAL_INTERVAL_MEAN))
             env.process(item())
+
     # --8<-- [end:feeder]
 
     # --8<-- [start:run]

@@ -47,6 +47,7 @@ def run_mm1(
             total_service += service_time
             num_served += 1
             yield sim.delay(service_time)
+
     # --8<-- [end:customer]
 
     # --8<-- [start:arrivals]
@@ -54,6 +55,7 @@ def run_mm1(
         for _ in range(num_customers):
             yield sim.delay(rng.expovariate(arrival_rate))
             sim.spawn(customer)
+
     # --8<-- [end:arrivals]
 
     # --8<-- [start:run]
