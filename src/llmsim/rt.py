@@ -35,6 +35,11 @@ from llmsim.core.sim import (
     _StopSimulation,
 )
 
+#: The public real-time surface (Phase 4.2). ``run`` is also re-exported by the
+#: top-level package via the ``rt`` submodule; ``RealtimeDriftError`` is
+#: re-exported directly in ``llmsim.__all__``.
+__all__ = ["RealtimeDriftError", "run"]
+
 #: Injectable clock seam: tests monkeypatch these (like
 #: ``backends._runtime_gil_enabled``) to drive pacing deterministically.
 _monotonic = time.monotonic

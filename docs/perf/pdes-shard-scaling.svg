@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 420" font-family="system-ui, sans-serif" role="img" aria-label="PDES shard scaling (3.14.2t)">
+<text x="340.0" y="26" text-anchor="middle" font-size="16" font-weight="600" fill="currentColor">PDES shard scaling (3.14.2t)</text>
+<rect x="64" y="48" width="466" height="316" fill="none" stroke="currentColor" stroke-opacity="0.25"/>
+<line x1="64" y1="364.0" x2="530" y2="364.0" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="56" y="368.0" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">0x</text>
+<line x1="64" y1="237.6" x2="530" y2="237.6" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="56" y="241.6" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">0.5x</text>
+<line x1="64" y1="111.2" x2="530" y2="111.2" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="56" y="115.2" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">1x</text>
+<line x1="64" y1="111.2" x2="530" y2="111.2" stroke="currentColor" stroke-opacity="0.45" stroke-dasharray="4 3"/>
+<text x="526" y="106.2" text-anchor="end" font-size="10" fill="currentColor" fill-opacity="0.6">parity (1x)</text>
+<text x="64.0" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">1</text>
+<text x="130.6" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">2</text>
+<text x="263.7" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">4</text>
+<text x="530.0" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">8</text>
+<text x="297.0" y="412" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8">shard count</text>
+<text x="16" y="206.0" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8" transform="rotate(-90 16 206.0)">speedup vs sequential</text>
+<path d="M 64.0 96.0 L 130.6 85.9 L 263.7 123.8 L 530.0 250.2" fill="none" stroke="#0072b2" stroke-width="2.5"/>
+<circle cx="64.0" cy="96.0" r="3.5" fill="#0072b2"/>
+<circle cx="130.6" cy="85.9" r="3.5" fill="#0072b2"/>
+<circle cx="263.7" cy="123.8" r="3.5" fill="#0072b2"/>
+<circle cx="530.0" cy="250.2" r="3.5" fill="#0072b2"/>
+<line x1="546" y1="54" x2="566" y2="54" stroke="#0072b2" stroke-width="2.5"/>
+<circle cx="556" cy="54" r="3.5" fill="#0072b2"/>
+<text x="572" y="58" font-size="11" fill="currentColor" fill-opacity="0.85">shards (3.14.2t)</text>
+</svg>

@@ -25,6 +25,11 @@ if TYPE_CHECKING:
 #: is disabled.
 TraceSink = Callable[[float, int, str, int, "Event[Any]"], None]
 
+#: The public tracing surface. ``TraceSink`` is an internal signature alias and
+#: is deliberately excluded. ``llmsim.trace`` is a public submodule but is not
+#: re-exported into ``llmsim.__all__``.
+__all__ = ["TraceRecord", "Tracer", "trace", "disable_trace"]
+
 
 def _canonical_payload(value: Any) -> Any:
     """Reduce an event's value to a run-stable, comparable form.

@@ -121,10 +121,15 @@ jobs:
           uv run python -c "import sys; assert not sys._is_gil_enabled()"
           uv run pytest tests/test_pdes_soak.py --count=25 -x -q
 
-  # Verify the docs skeleton builds. Not a required gate for Phase 0 done, but
-  # keeps the mkdocs-material skeleton honest.
+  # Strict docs build. Required PR gate (Phase 4.4): a broken internal link,
+  # a page missing from nav, or a missing docstring on a public symbol fails
+  # `mkdocs build --strict`. Mark `docs-build (3.14, ubuntu-latest)` as a
+  # required status check in branch protection alongside the gate rows. Runs on
+  # pull requests only; on push to main the deploy workflow (docs-deploy.yml)
+  # performs the same strict build, so gating it here avoids building twice.
   docs:
     name: docs-build (3.14, ubuntu-latest)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       UV_PYTHON: "3.14"
