@@ -1,5 +1,6 @@
 site_name: llmsim
 site_description: Parallel discrete-event simulation for Python 3.14+
+site_url: https://nobelk.github.io/llmsim/
 repo_url: https://github.com/nobelk/llmsim
 docs_dir: docs
 
@@ -7,6 +8,7 @@ theme:
   name: material
   features:
     - navigation.sections
+    - navigation.indexes
     - content.code.copy
   palette:
     - scheme: default
@@ -20,12 +22,53 @@ theme:
 
 nav:
   - Home: index.md
-  - Which parallelism do I need?: parallelism-decision-tree.md
-  - Design:
+  - User guide:
+      - Getting started: guide/getting-started.md
+      - Core concepts: guide/core-concepts.md
+      - Resources and stores: guide/resources.md
+      - Tracing and determinism: guide/tracing.md
+  - Parallelism:
+      - parallelism-decision-tree.md
+      - Parallel replications: guide/replications.md
+      - PDES sharding: guide/pdes.md
+      - Compute offload: guide/offload.md
+      - Real-time mode: guide/realtime.md
+  - Performance:
+      - Overview: perf-notes.md
+      - Replication scaling: perf/replication-scaling.md
+      - PDES scaling: perf/pdes-scaling.md
+  - API reference:
+      - Core engine: reference/core.md
+      - Resources: reference/resources.md
+      - Randomness: reference/randomness.md
+      - Parallel: reference/parallel.md
+      - Real-time: reference/realtime.md
+      - Tracing: reference/tracing.md
+  - Migration and design:
+      - Migrating from SimPy 3: migration-from-simpy.md
+      - Deprecation policy: deprecation-policy.md
       - Design document: part-deux.md
       - SimPy 3 comparison: simpy-comparison.md
-  - Performance notes: perf-notes.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            docstring_section_style: table
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            separate_signature: true
+            merge_init_into_class: true
+            filters: ["!^_"]
 
 markdown_extensions:
   - admonition
   - pymdownx.superfences
+  - toc:
+      permalink: true

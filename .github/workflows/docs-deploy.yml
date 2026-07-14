@@ -1,0 +1,56 @@
+name: Deploy docs
+
+# Publish the documentation site to GitHub Pages (latest-only) on every push to
+# main. Pull requests are gated separately by the strict `docs` build in ci.yml;
+# this workflow only deploys already-merged main.
+on:
+  push:
+    branches: ["main"]
+
+# Least privilege: only the Pages deployment needs write scope; id-token is
+# required by actions/deploy-pages for OIDC attestation.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel or overlap deploys; queue them so the live site is always the
+# newest completed build.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build (3.14, ubuntu-latest)
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.14"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install interpreter
+        run: uv python install 3.14
+      - name: Sync docs group (frozen)
+        run: uv sync --frozen --group docs
+      - name: Build docs (strict)
+        run: uv run mkdocs build --strict
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

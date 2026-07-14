@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 420" font-family="system-ui, sans-serif" role="img" aria-label="PDES lookahead degradation (4-shard ring)">
+<text x="340.0" y="26" text-anchor="middle" font-size="16" font-weight="600" fill="currentColor">PDES lookahead degradation (4-shard ring)</text>
+<rect x="64" y="48" width="466" height="316" fill="none" stroke="currentColor" stroke-opacity="0.25"/>
+<line x1="64" y1="364.0" x2="530" y2="364.0" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="56" y="368.0" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">0x</text>
+<line x1="64" y1="206.0" x2="530" y2="206.0" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="56" y="210.0" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">0.05x</text>
+<line x1="64" y1="48.0" x2="530" y2="48.0" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="56" y="52.0" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">0.1x</text>
+<text x="64.0" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">0.25</text>
+<text x="95.1" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">0.5</text>
+<text x="157.2" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">1</text>
+<text x="281.5" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">2</text>
+<text x="530.0" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">4</text>
+<text x="297.0" y="412" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8">lookahead / mean event spacing</text>
+<text x="16" y="206.0" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8" transform="rotate(-90 16 206.0)">wall clock vs L=4x sequential</text>
+<path d="M 64.0 332.4 L 95.1 332.4 L 157.2 300.8 L 281.5 206.0 L 530.0 48.0" fill="none" stroke="#0072b2" stroke-width="2.5"/>
+<circle cx="64.0" cy="332.4" r="3.5" fill="#0072b2"/>
+<circle cx="95.1" cy="332.4" r="3.5" fill="#0072b2"/>
+<circle cx="157.2" cy="300.8" r="3.5" fill="#0072b2"/>
+<circle cx="281.5" cy="206.0" r="3.5" fill="#0072b2"/>
+<circle cx="530.0" cy="48.0" r="3.5" fill="#0072b2"/>
+<line x1="546" y1="54" x2="566" y2="54" stroke="#0072b2" stroke-width="2.5"/>
+<circle cx="556" cy="54" r="3.5" fill="#0072b2"/>
+<text x="572" y="58" font-size="11" fill="currentColor" fill-opacity="0.85">wall clock vs L=4x</text>
+</svg>

@@ -2,9 +2,12 @@
 
 A parallel discrete-event simulation (DES) library for Python 3.14+.
 
-> **Status: planning.** The design and roadmap are complete (see
-> [Project documents](#project-documents)); implementation has not started.
-> All code samples below show the planned API.
+> **Status: approaching 1.0.** The sequential core and all four parallelism
+> tiers are implemented and gated by same-seed determinism tests; the 1.0 tag
+> and PyPI publish follow the Phase 5 example gallery (see the
+> [roadmap](specs/roadmap.md)). Full documentation — guides, API reference, and
+> measured scaling curves — is published at
+> **[nobelk.github.io/llmsim](https://nobelk.github.io/llmsim/)**.
 
 ## Overview
 

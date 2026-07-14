@@ -142,13 +142,16 @@ Goal: round out the parallel story and freeze the API.
 - [x] **4.3 Migration guide from SimPy 3** — concept-mapping table
   (`env.process` → `sim.spawn`, `env.timeout` → `sim.delay`, …) plus worked
   example ports of the canonical models.
-- [ ] **4.4 Docs site** — full documentation build; decision tree as the
-  parallel landing page; published scaling curves.
-- [ ] **4.5 1.0 API freeze review** — public-API audit (typing completeness,
-  naming consistency, deprecation policy), then tag 1.0 and publish to PyPI.
-  **Gated on Phase 5:** both domain examples must be green first — they are
-  the API's dogfooding pass, and freezing before they exist would forfeit
-  their feedback.
+- [x] **4.4 Docs site** — full documentation build (user guide + mkdocstrings
+  API reference); decision tree as the parallel landing page; published scaling
+  curves; GitHub Pages deploy workflow with `mkdocs build --strict` as a
+  required PR gate.
+- [~] **4.5 1.0 API freeze review** — public-API audit **complete**
+  (`specs/phase-4.4-4.5/api-audit.md`: typing completeness, `__all__`
+  consistency test, naming consistency, deprecation policy page); zero
+  unresolved findings. Tag 1.0 and publish to PyPI **still pending the Phase 5
+  gate** — both domain examples must be green first, as they are the API's
+  dogfooding pass and freezing before they exist would forfeit their feedback.
 
 **Exit criteria:** offload trace-equivalence (strict mode) green; docs
 complete; Phase 5 examples green; 1.0 on PyPI.
