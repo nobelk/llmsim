@@ -48,17 +48,17 @@ passes its ported behavioral suite.
   the hook the Phase 2 seed tree plugs into.
 - [ ] **1.6 Thread-ownership debug mode** — `Sim(debug=True)` /
   `LLMSIM_DEBUG=1`: assert owning-thread identity on every `schedule()`.
-- [ ] **1.7 Resources: base + Resource** — `resources/base.py` request/release
+- [x] **1.7 Resources: base + Resource** — `resources/base.py` request/release
   protocol (context managers, trigger chains); `Resource`, `PriorityResource`,
   `PreemptiveResource`.
-- [ ] **1.8 Resources: Container + Stores** — `Container`; `Store`,
+- [x] **1.8 Resources: Container + Stores** — `Container`; `Store`,
   `PriorityStore`, `FilterStore`.
-- [ ] **1.9 Structured tracing** — `trace.py`: canonical event logs (needed by
+- [x] **1.9 Structured tracing** — `trace.py`: canonical event logs (needed by
   Phase 3 equivalence tests; cheap to add now).
-- [ ] **1.10 SimPy 3 behavioral suite port** — port the ~150-test suite to the
+- [x] **1.10 SimPy 3 behavioral suite port** — port the ~150-test suite to the
   new API as the acceptance gate (interrupt edge cases, condition composition,
   preemption, store filtering).
-- [ ] **1.11 Canonical models on llmsim + perf gate** — reimplement the three
+- [x] **1.11 Canonical models on llmsim + perf gate** — reimplement the three
   benchmark models on llmsim; wire regression thresholds into CI.
 
 **Exit criteria:** ported behavioral suite green; ≥1.2× event throughput vs
@@ -139,7 +139,7 @@ Goal: round out the parallel story and freeze the API.
   failure/cancellation semantics; max-vs-sum ceiling documented.
 - [x] **4.2 Real-time mode** — `rt.py`: wall-clock-synchronized stepping on
   `time.monotonic()`; offload synergy for hardware-in-the-loop.
-- [ ] **4.3 Migration guide from SimPy 3** — concept-mapping table
+- [x] **4.3 Migration guide from SimPy 3** — concept-mapping table
   (`env.process` → `sim.spawn`, `env.timeout` → `sim.delay`, …) plus worked
   example ports of the canonical models.
 - [ ] **4.4 Docs site** — full documentation build; decision tree as the
