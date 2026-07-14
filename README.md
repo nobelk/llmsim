@@ -46,8 +46,9 @@ sim.run(until=100.0)
 
 Explicit non-goals: no optimistic/Time Warp synchronization (CPython cannot
 snapshot a live generator frame), no automatic parallelization of
-unpartitioned models, no SimPy 3 API compatibility (a migration guide ships
-instead), no Python < 3.14.
+unpartitioned models, no SimPy 3 API compatibility (the
+[migration guide](docs/migration-from-simpy.md) ships instead), no
+Python < 3.14.
 
 ## Architecture
 

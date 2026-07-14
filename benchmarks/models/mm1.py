@@ -23,13 +23,16 @@ def run_mm1(
         Mapping with ``mean_wait`` (mean time in queue), ``utilization``
         (fraction of time the server was busy), and ``num_served``.
     """
+    # --8<-- [start:setup]
     rng = random.Random(seed)
     env = simpy.Environment()
     server = simpy.Resource(env, capacity=1)
     total_wait = 0.0
     total_service = 0.0
     num_served = 0
+    # --8<-- [end:setup]
 
+    # --8<-- [start:customer]
     def customer() -> object:
         nonlocal total_wait, total_service, num_served
         arrived_at = env.now
@@ -41,13 +44,20 @@ def run_mm1(
             num_served += 1
             yield env.timeout(service_time)
 
+    # --8<-- [end:customer]
+
+    # --8<-- [start:arrivals]
     def arrivals() -> object:
         for _ in range(num_customers):
             yield env.timeout(rng.expovariate(arrival_rate))
             env.process(customer())
 
+    # --8<-- [end:arrivals]
+
+    # --8<-- [start:run]
     env.process(arrivals())
     env.run()
+    # --8<-- [end:run]
 
     return {
         "mean_wait": round(total_wait / num_served, 6),

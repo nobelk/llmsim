@@ -38,6 +38,7 @@ def run_grid_conveyor(
         Mapping with ``items_delivered`` and ``mean_transit`` (mean end-to-end
         time across delivered items).
     """
+    # --8<-- [start:setup]
     sim = Sim(seed=seed)
     rng = sim.rng
     segments = {
@@ -48,7 +49,9 @@ def run_grid_conveyor(
     route = _route(rows, cols)
     total_transit = 0.0
     delivered = 0
+    # --8<-- [end:setup]
 
+    # --8<-- [start:item]
     def item(sim: Sim) -> Generator[Event[Any], Any, None]:
         nonlocal total_transit, delivered
         entered_at = sim.now
@@ -59,13 +62,20 @@ def run_grid_conveyor(
         total_transit += sim.now - entered_at
         delivered += 1
 
+    # --8<-- [end:item]
+
+    # --8<-- [start:feeder]
     def feeder(sim: Sim) -> Generator[Event[Any], Any, None]:
         for _ in range(num_items):
             yield sim.delay(rng.expovariate(1.0 / ARRIVAL_INTERVAL_MEAN))
             sim.spawn(item)
 
+    # --8<-- [end:feeder]
+
+    # --8<-- [start:run]
     sim.spawn(feeder)
     sim.run()
+    # --8<-- [end:run]
 
     return {
         "items_delivered": float(delivered),

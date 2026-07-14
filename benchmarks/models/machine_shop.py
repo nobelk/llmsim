@@ -31,6 +31,7 @@ def _time_per_part(rng: random.Random) -> float:
 class _Machine:
     """A single machine that makes parts and occasionally breaks down."""
 
+    # --8<-- [start:init]
     def __init__(
         self,
         env: simpy.Environment,
@@ -45,6 +46,9 @@ class _Machine:
         self.process = env.process(self._work())
         env.process(self._break())
 
+    # --8<-- [end:init]
+
+    # --8<-- [start:work]
     def _work(self) -> object:
         while True:
             remaining = _time_per_part(self.rng)
@@ -62,11 +66,16 @@ class _Machine:
                         yield self.env.timeout(REPAIR_TIME)
                     self.broken = False
 
+    # --8<-- [end:work]
+
+    # --8<-- [start:break]
     def _break(self) -> object:
         while True:
             yield self.env.timeout(self.rng.expovariate(1.0 / MEAN_TIME_TO_FAILURE))
             if not self.broken:
                 self.process.interrupt()
+
+    # --8<-- [end:break]
 
 
 def run_machine_shop(
@@ -85,11 +94,13 @@ def run_machine_shop(
         Mapping with ``parts_made`` (total across all machines) and
         ``parts_per_machine`` (the per-machine mean).
     """
+    # --8<-- [start:run]
     rng = random.Random(seed)
     env = simpy.Environment()
     repairers = simpy.PreemptiveResource(env, capacity=num_repairers)
     machines = [_Machine(env, repairers, rng) for _ in range(num_machines)]
     env.run(until=SHOP_DURATION)
+    # --8<-- [end:run]
 
     total_parts = sum(machine.parts_made for machine in machines)
     return {

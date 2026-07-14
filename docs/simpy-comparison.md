@@ -7,6 +7,10 @@ Python 2 `_compat` layer, so those are *not* llmsim differentiators. Everything
 below compares llmsim's plans (`specs/`, `docs/part-deux.md`) against what is
 actually in SimPy master today.
 
+This page argues *why* to migrate; for the *how* — a concept-by-concept
+mapping with worked model ports — see
+[Migrating from SimPy 3](migration-from-simpy.md).
+
 ## Where SimPy master stands
 
 - **Engine:** one single-threaded `heapq` loop — `Environment.step()` pops

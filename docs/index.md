@@ -16,5 +16,7 @@ across cores, never locks on the sequential engine.
 
 - **[Which parallelism do I need?](parallelism-decision-tree.md)** — the
   decision tree for choosing between replication, offload, and PDES.
+- **[Migrating from SimPy 3](migration-from-simpy.md)** — the concept-by-concept
+  porting guide, with all three canonical models worked side by side.
 - **[Design document](part-deux.md)** — the full design everything derives from.
 - **[SimPy 3 comparison](simpy-comparison.md)** — how llmsim relates to SimPy 3.

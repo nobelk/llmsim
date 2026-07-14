@@ -39,6 +39,7 @@ def run_grid_conveyor(
         Mapping with ``items_delivered`` and ``mean_transit`` (mean end-to-end
         time across delivered items).
     """
+    # --8<-- [start:setup]
     rng = random.Random(seed)
     env = simpy.Environment()
     segments = {
@@ -49,7 +50,9 @@ def run_grid_conveyor(
     route = _route(rows, cols)
     total_transit = 0.0
     delivered = 0
+    # --8<-- [end:setup]
 
+    # --8<-- [start:item]
     def item() -> object:
         nonlocal total_transit, delivered
         entered_at = env.now
@@ -60,13 +63,20 @@ def run_grid_conveyor(
         total_transit += env.now - entered_at
         delivered += 1
 
+    # --8<-- [end:item]
+
+    # --8<-- [start:feeder]
     def feeder() -> object:
         for _ in range(num_items):
             yield env.timeout(rng.expovariate(1.0 / ARRIVAL_INTERVAL_MEAN))
             env.process(item())
 
+    # --8<-- [end:feeder]
+
+    # --8<-- [start:run]
     env.process(feeder())
     env.run()
+    # --8<-- [end:run]
 
     return {
         "items_delivered": float(delivered),
