@@ -31,6 +31,7 @@ def _time_per_part(rng: random.Random) -> float:
 class _Machine:
     """A single machine that makes parts and occasionally breaks down."""
 
+    # --8<-- [start:init]
     def __init__(
         self, sim: Sim, repairers: PreemptiveResource, rng: random.Random
     ) -> None:
@@ -41,7 +42,9 @@ class _Machine:
         self.broken = False
         self.process = sim.spawn(self._work)
         sim.spawn(self._break)
+    # --8<-- [end:init]
 
+    # --8<-- [start:work]
     def _work(self, sim: Sim) -> Generator[Event[Any], Any, None]:
         while True:
             remaining = _time_per_part(self.rng)
@@ -58,12 +61,15 @@ class _Machine:
                         yield repair
                         yield self.sim.delay(REPAIR_TIME)
                     self.broken = False
+    # --8<-- [end:work]
 
+    # --8<-- [start:break]
     def _break(self, sim: Sim) -> Generator[Event[Any], Any, None]:
         while True:
             yield self.sim.delay(self.rng.expovariate(1.0 / MEAN_TIME_TO_FAILURE))
             if not self.broken:
                 self.process.interrupt()
+    # --8<-- [end:break]
 
 
 def run_machine_shop(
@@ -82,11 +88,13 @@ def run_machine_shop(
         Mapping with ``parts_made`` (total across all machines) and
         ``parts_per_machine`` (the per-machine mean).
     """
+    # --8<-- [start:run]
     sim = Sim(seed=seed)
     rng = sim.rng
     repairers = PreemptiveResource(sim, capacity=num_repairers)
     machines = [_Machine(sim, repairers, rng) for _ in range(num_machines)]
     sim.run(until=SHOP_DURATION)
+    # --8<-- [end:run]
 
     total_parts = sum(machine.parts_made for machine in machines)
     return {

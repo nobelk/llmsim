@@ -27,13 +27,16 @@ def run_mm1(
         Mapping with ``mean_wait`` (mean time in queue), ``utilization``
         (fraction of time the server was busy), and ``num_served``.
     """
+    # --8<-- [start:setup]
     sim = Sim(seed=seed)
     rng = sim.rng
     server = Resource(sim, capacity=1)
     total_wait = 0.0
     total_service = 0.0
     num_served = 0
+    # --8<-- [end:setup]
 
+    # --8<-- [start:customer]
     def customer(sim: Sim) -> Generator[Event[Any], Any, None]:
         nonlocal total_wait, total_service, num_served
         arrived_at = sim.now
@@ -44,14 +47,19 @@ def run_mm1(
             total_service += service_time
             num_served += 1
             yield sim.delay(service_time)
+    # --8<-- [end:customer]
 
+    # --8<-- [start:arrivals]
     def arrivals(sim: Sim) -> Generator[Event[Any], Any, None]:
         for _ in range(num_customers):
             yield sim.delay(rng.expovariate(arrival_rate))
             sim.spawn(customer)
+    # --8<-- [end:arrivals]
 
+    # --8<-- [start:run]
     sim.spawn(arrivals)
     sim.run()
+    # --8<-- [end:run]
 
     return {
         "mean_wait": round(total_wait / num_served, 6),
