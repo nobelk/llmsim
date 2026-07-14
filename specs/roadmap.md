@@ -11,17 +11,17 @@ per phase. Steps within a phase are ordered by dependency.
 Goal: a repo where every later step lands with lint, types, tests, and
 benchmarks enforced from day one.
 
-- [ ] **0.1 Package skeleton** — `pyproject.toml` (PEP 621, hatchling,
+- [x] **0.1 Package skeleton** — `pyproject.toml` (PEP 621, hatchling,
   `requires-python = ">=3.14"`), `src/llmsim/` layout with empty modules per
   the package map, Apache-2.0 metadata, README stub.
-- [ ] **0.2 Quality gates** — ruff (lint + format, enforcing PEP 8 per the
+- [x] **0.2 Quality gates** — ruff (lint + format, enforcing PEP 8 per the
   tech stack), mypy strict, pyright
   strict, pytest wiring; pre-commit config; a trivial smoke test proving the
   gates run.
-- [ ] **0.3 CI matrix** — GitHub Actions: `{3.14, 3.14t, 3.15-dev} ×
+- [x] **0.3 CI matrix** — GitHub Actions: `{3.14, 3.14t, 3.15-dev} ×
   {Linux, macOS}`, plus the `PYTHON_GIL=0/1` axis on 3.14t; all Phase 0.2
   gates enforced per PR.
-- [ ] **0.4 Benchmark harness** — pytest-benchmark scaffolding; three canonical
+- [x] **0.4 Benchmark harness** — pytest-benchmark scaffolding; three canonical
   models as *SimPy 3* implementations (M/M/1 queue, machine shop, 100×100 grid
   conveyor); record SimPy 3 baseline numbers per CI machine class.
 
@@ -33,20 +33,20 @@ and stored with the repo.
 Goal: a clean-break, fully typed engine that beats SimPy 3 on one thread and
 passes its ported behavioral suite.
 
-- [ ] **1.1 Event system** — `core/events.py`: generic `__slots__`-based
+- [x] **1.1 Event system** — `core/events.py`: generic `__slots__`-based
   `Event[T]` (pending sentinel, callbacks, ok/defused), `Timeout`; events are
   awaitable (`__await__` yields self once).
-- [ ] **1.2 Event loop** — `core/sim.py`: `Sim` with heapq scheduling
+- [x] **1.2 Event loop** — `core/sim.py`: `Sim` with heapq scheduling
   (`(time, priority, eid, event)`), `sim.now`, `sim.delay()`, `run(until=...)`,
   step/peek; `core/errors.py` (`Interrupt`, `SimulationError`, `EmptySchedule`).
-- [ ] **1.3 Process driver** — `core/process.py`: `Process` driving generators
+- [x] **1.3 Process driver** — `core/process.py`: `Process` driving generators
   *and* coroutines via one `send()`/`throw()` driver; `sim.spawn()`;
   interrupt semantics.
-- [ ] **1.4 Condition composition** — `Condition`, `AllOf`, `AnyOf`; multiple
+- [x] **1.4 Condition composition** — `Condition`, `AllOf`, `AnyOf`; multiple
   failures aggregate into `ExceptionGroup`.
-- [ ] **1.5 Per-Sim RNG** — `sim.rng: random.Random` seeded via constructor;
+- [x] **1.5 Per-Sim RNG** — `sim.rng: random.Random` seeded via constructor;
   the hook the Phase 2 seed tree plugs into.
-- [ ] **1.6 Thread-ownership debug mode** — `Sim(debug=True)` /
+- [x] **1.6 Thread-ownership debug mode** — `Sim(debug=True)` /
   `LLMSIM_DEBUG=1`: assert owning-thread identity on every `schedule()`.
 - [x] **1.7 Resources: base + Resource** — `resources/base.py` request/release
   protocol (context managers, trigger chains); `Resource`, `PriorityResource`,
@@ -69,27 +69,27 @@ SimPy 3 on 3.14; zero functional regressions on 3.14t.
 Goal: `Experiment.run()` delivering near-linear Monte Carlo scaling with
 bit-identical results across backends.
 
-- [ ] **2.1 Seed tree** — `rand/streams.py`: master seed →
+- [x] **2.1 Seed tree** — `rand/streams.py`: master seed →
   (config index, replication index) → 128-bit child seeds via SHA-256 path
   hashing; unit tests for independence and stability.
-- [ ] **2.2 Execution backends** — `parallel/backends.py`: `ExecutionBackend`
+- [x] **2.2 Execution backends** — `parallel/backends.py`: `ExecutionBackend`
   abstraction over thread / interpreter / process pools; `backend="auto"`
   runtime selection; factory-importability validation at construction with
   actionable errors.
-- [ ] **2.3 Experiment API** — `parallel/replicate.py`: `Experiment`,
+- [x] **2.3 Experiment API** — `parallel/replicate.py`: `Experiment`,
   `run_replications()`, `ReplicationResult`; results keyed by
   (config, replication), never completion order.
-- [ ] **2.4 Result streaming + cancellation** — `exp.iter_results()` yielding
+- [x] **2.4 Result streaming + cancellation** — `exp.iter_results()` yielding
   as-completed; backend-aware cancellation (thread backend: shared token
   checked between steps for mid-replication cancel; interpreter/process
   backends: replication-granularity cancel — stop dispatching and
   `Future.cancel()` pending work, since isolated workers cannot see a parent
   token); optional zstd spooling for large traces; warm-pool reuse on the
   interpreter backend.
-- [ ] **2.5 Backend conformance tests** — identical result sets across all
+- [x] **2.5 Backend conformance tests** — identical result sets across all
   three backends for fixed seeds (validates the reproducibility guarantee);
   GIL re-enable detection after model import in workers, with loud warning.
-- [ ] **2.6 Scaling benchmarks + docs** — replication throughput vs worker
+- [x] **2.6 Scaling benchmarks + docs** — replication throughput vs worker
   count on 3.14t and GIL builds; publish curves; memory (RSS per replication)
   guidance; the "Which parallelism do I need?" decision-tree doc page.
 
@@ -101,24 +101,24 @@ identical numerics across all three backends.
 Goal: shard one large model across cores with provable equivalence to the
 sequential reference.
 
-- [ ] **3.1 Channels + mailboxes** — `parallel/pdes/channel.py`: typed,
+- [x] **3.1 Channels + mailboxes** — `parallel/pdes/channel.py`: typed,
   lookahead-carrying channels; locked `deque` mailboxes; send-delay ≥ lookahead
   enforcement; deterministic `(timestamp, channel id, sequence)` ordering.
-- [ ] **3.2 ShardedSim topology** — `parallel/pdes/shard.py`: `@topo.shard(i)`
+- [x] **3.2 ShardedSim topology** — `parallel/pdes/shard.py`: `@topo.shard(i)`
   builders, per-shard `Sim` on its own thread, ports API; cross-shard resource
   sharing rejected at construction.
-- [ ] **3.3 Safe-window synchronizer** — `parallel/pdes/sync.py`: barrier-based
+- [x] **3.3 Safe-window synchronizer** — `parallel/pdes/sync.py`: barrier-based
   YAWNS-style rounds (bound reporting, global horizon `H`, delivery-before-
   execution, strict `time < H` execution); GIL-build prominent warning
   (correct but not faster).
-- [ ] **3.4 Trace-equivalence test suite** — sharded grid-conveyor trace ≡
+- [x] **3.4 Trace-equivalence test suite** — sharded grid-conveyor trace ≡
   sequential trace, bitwise, across 1/2/4/8 shards — including the adversarial
   horizon-boundary model (messages at exactly `H`, ties with local events).
-- [ ] **3.5 Concurrency soak CI job** — long randomized runs on 3.14t with
+- [x] **3.5 Concurrency soak CI job** — long randomized runs on 3.14t with
   `pytest-repeat` and randomized barriers; assertions-on debug build.
-- [ ] **3.6 `pdes.analyze()`** — critical-path estimator from sequential
+- [x] **3.6 `pdes.analyze()`** — critical-path estimator from sequential
   traces so users can predict achievable speedup before partitioning.
-- [ ] **3.7 PDES performance gate + honest docs** — grid-conveyor benchmark at
+- [x] **3.7 PDES performance gate + honest docs** — grid-conveyor benchmark at
   1/2/4/8 shards; documented slowdown curve as lookahead → 0.
 
 **Exit criteria:** bitwise equivalence suite (including the adversarial
