@@ -36,7 +36,7 @@ dependencies = []
 [project.urls]
 Homepage = "https://github.com/nobelk/llmsim"
 Repository = "https://github.com/nobelk/llmsim"
-Documentation = "https://nobelk.github.io/llmsim/"
+Documentation = "https://outloop.blog/llmsim/"
 
 # Development toolchains use PEP 735 dependency groups rather than optional
 # extras, so none of them appear in the published wheel's metadata and

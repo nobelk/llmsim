@@ -7,7 +7,7 @@ A parallel discrete-event simulation (DES) library for Python 3.14+.
 > and PyPI publish follow the Phase 5 example gallery (see the
 > [roadmap](specs/roadmap.md)). Full documentation — guides, API reference, and
 > measured scaling curves — is published at
-> **[nobelk.github.io/llmsim](https://nobelk.github.io/llmsim/)**.
+> **[outloop.blog/llmsim](https://outloop.blog/llmsim/)**.
 
 ## Overview
 
