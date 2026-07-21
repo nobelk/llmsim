@@ -1,6 +1,6 @@
 site_name: llmsim
 site_description: Parallel discrete-event simulation for Python 3.14+
-site_url: https://nobelk.github.io/llmsim/
+site_url: https://outloop.blog/llmsim/
 repo_url: https://github.com/nobelk/llmsim
 docs_dir: docs
 
