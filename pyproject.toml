@@ -69,7 +69,7 @@ docs = [
 packages = ["src/llmsim"]
 
 [tool.ruff]
-src = ["src", "tests", "benchmarks"]
+src = ["src", "tests", "benchmarks", "examples"]
 line-length = 88
 
 [tool.ruff.lint]
@@ -91,10 +91,10 @@ convention = "pep257"
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "examples"]
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "examples"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
 # The sequential engine is one cohesive collaboration: the event loop, events,

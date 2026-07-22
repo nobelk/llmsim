@@ -95,6 +95,47 @@ jobs:
           path: benchmarks/baselines/
           if-no-files-found: warn
 
+  # Example gallery smoke-run (Phase 5.5): executes every example and showcase
+  # as a program with small parameters, on 3.14 and both 3.14t GIL settings, so
+  # the gallery is proven to run end to end (not just under pytest) on every
+  # supported build. Fast enough for a per-PR job.
+  examples:
+    name: examples (${{ matrix.python }}${{ matrix.gil && format(' GIL={0}', matrix.gil) || '' }})
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.14", gil: "" }
+          - { python: "3.14t", gil: "0" }
+          - { python: "3.14t", gil: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install interpreter
+        run: uv python install "${{ matrix.python }}"
+      - name: Sync (frozen)
+        run: uv sync --frozen
+      - name: Smoke-run every example
+        run: |
+          if [ -n "${{ matrix.gil }}" ]; then
+            export PYTHON_GIL="${{ matrix.gil }}"
+          fi
+          uv run python -c "import sys; print('GIL enabled:', sys._is_gil_enabled())"
+          uv run python -m examples.smoke
+          # The example test suites (behavioral, determinism, trace-equivalence,
+          # no-network) also run here so the gallery's guarantees are asserted on
+          # both builds.
+          uv run pytest tests/test_ride_hailing.py tests/test_ride_hailing_study.py \
+            tests/test_ride_hailing_sharded.py tests/test_agentic_workflow.py \
+            tests/test_agentic_study.py tests/test_agentic_offload.py \
+            tests/test_example_backends.py -q
+
   # Concurrency soak (Phase 3.5): repeated PDES equivalence runs on the
   # free-threaded build with randomized barrier jitter and the debug-mode
   # ownership assertions on. The repeat count is the wall-clock budget knob

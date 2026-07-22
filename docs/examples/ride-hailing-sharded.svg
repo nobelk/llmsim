@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 420" font-family="system-ui, sans-serif" role="img" aria-label="Zone-sharded PDES: throughput vs shard count">
+<text x="340.0" y="26" text-anchor="middle" font-size="16" font-weight="600" fill="currentColor">Zone-sharded PDES: throughput vs shard count</text>
+<rect x="68" y="48" width="452" height="316" fill="none" stroke="currentColor" stroke-opacity="0.25"/>
+<line x1="68" y1="364.0" x2="520" y2="364.0" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="60" y="368.0" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">0</text>
+<line x1="68" y1="300.8" x2="520" y2="300.8" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="60" y="304.8" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">50</text>
+<line x1="68" y1="237.6" x2="520" y2="237.6" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="60" y="241.6" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">100</text>
+<line x1="68" y1="174.4" x2="520" y2="174.4" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="60" y="178.4" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">150</text>
+<line x1="68" y1="111.2" x2="520" y2="111.2" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="60" y="115.2" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">200</text>
+<line x1="68" y1="48.0" x2="520" y2="48.0" stroke="currentColor" stroke-opacity="0.08"/>
+<text x="60" y="52.0" text-anchor="end" font-size="11" fill="currentColor" fill-opacity="0.7">250</text>
+<text x="68.0" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">1</text>
+<text x="132.6" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">2</text>
+<text x="261.7" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">4</text>
+<text x="520.0" y="382" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity="0.7">8</text>
+<text x="294.0" y="412" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8">shard count</text>
+<text x="16" y="206.0" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8" transform="rotate(-90 16 206.0)">served requests</text>
+<path d="M 68.0 77.1 L 132.6 54.3 L 261.7 125.1 L 520.0 182.0" fill="none" stroke="#0072b2" stroke-width="2.5"/>
+<circle cx="68.0" cy="77.1" r="3.5" fill="#0072b2"/>
+<circle cx="132.6" cy="54.3" r="3.5" fill="#0072b2"/>
+<circle cx="261.7" cy="125.1" r="3.5" fill="#0072b2"/>
+<circle cx="520.0" cy="182.0" r="3.5" fill="#0072b2"/>
+<line x1="536" y1="54" x2="556" y2="54" stroke="#0072b2" stroke-width="2.5"/>
+<circle cx="546" cy="54" r="3.5" fill="#0072b2"/>
+<text x="562" y="58" font-size="11" fill="currentColor" fill-opacity="0.85">served requests</text>
+</svg>
