@@ -402,30 +402,51 @@ class TestPooledNonStrict:
         assert seen == [(50.0, 9.0)]
 
     def test_poll_delivers_between_steps_while_time_advances(self) -> None:
-        """A completed future is observed by the owning thread mid-run."""
+        """A completed future is observed by the owning thread mid-run.
+
+        Made deterministic with the started/release handshake instead of racing
+        a wall-clock sleep against the scheduler: the payload cannot finish
+        before the ticker releases it at ``t == 10``, so a post-step poll can
+        never deliver it at ``t == 0`` (which would be the run-end-drain time),
+        and the 190 remaining ticks give the poll ample room to observe the
+        completion mid-run. The prior sleep-timed version flaked on loaded
+        free-threaded macOS runners, where the payload occasionally finished
+        before the clock advanced past 0 and delivery landed at ``t == 0``.
+        """
+        offload_started.clear()
+        offload_release.clear()
         sim = Sim()
         seen: list[tuple[float, float]] = []
 
         def waiter(sim: Sim) -> Gen:
-            value = yield sim.offload(offload_slow_square, 3.0, 0.02, strict=False)
+            value = yield sim.offload(offload_blocking, 3.0, strict=False)
             seen.append((sim.now, value))
 
-        def slow_ticker(sim: Sim) -> Gen:
+        def ticker(sim: Sim) -> Gen:
             import time
 
-            for _ in range(200):
+            for tick in range(200):
                 yield sim.delay(1.0)
-                time.sleep(0.001)
+                if tick == 9:  # now == 10.0: the payload is running -- release it
+                    offload_started.wait(timeout=30)
+                    offload_release.set()
+                time.sleep(0.001)  # yield so the worker runs and is polled
 
         with OffloadPool(sim, backend="threads", max_workers=1):
             sim.spawn(waiter)
-            sim.spawn(slow_ticker)
-            sim.run()
+            sim.spawn(ticker)
+            try:
+                sim.run()
+            finally:
+                # Never leave the worker blocked -- pool close would hang on it.
+                offload_release.set()
         assert len(seen) == 1
         delivered_at, value = seen[0]
         assert value == 9.0
-        # Delivered mid-run by the post-step poll, not by the run-end drain.
-        assert 0.0 < delivered_at < 200.0
+        # Released at t=10, delivered by a post-step poll (not the run-end
+        # drain at t=200) once the worker completes -- deterministically
+        # after the clock advanced, never at t=0.
+        assert 10.0 <= delivered_at < 200.0
 
 
 class TestPooledCancellation:
