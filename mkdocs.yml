@@ -33,6 +33,10 @@ nav:
       - PDES sharding: guide/pdes.md
       - Compute offload: guide/offload.md
       - Real-time mode: guide/realtime.md
+  - Examples:
+      - Gallery: examples/index.md
+      - Ride-hailing fleet: examples/ride-hailing.md
+      - LLM agentic workflow: examples/agentic-workflow.md
   - Performance:
       - Overview: perf-notes.md
       - Replication scaling: perf/replication-scaling.md
