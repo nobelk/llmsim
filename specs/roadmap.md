@@ -149,9 +149,10 @@ Goal: round out the parallel story and freeze the API.
 - [~] **4.5 1.0 API freeze review** — public-API audit **complete**
   (`specs/phase-4.4-4.5/api-audit.md`: typing completeness, `__all__`
   consistency test, naming consistency, deprecation policy page); zero
-  unresolved findings. Tag 1.0 and publish to PyPI **still pending the Phase 5
-  gate** — both domain examples must be green first, as they are the API's
-  dogfooding pass and freezing before they exist would forfeit their feedback.
+  unresolved findings. The **Phase 5 gate is now clear** — both domain examples
+  are green and the API-friction list is resolved or waived
+  (`specs/phase-5-domain-example/api-friction.md`). Only tagging 1.0 and
+  publishing to PyPI remains (this phase unblocks but does not perform it).
 
 **Exit criteria:** offload trace-equivalence (strict mode) green; docs
 complete; Phase 5 examples green; 1.0 on PyPI.
@@ -163,32 +164,32 @@ demonstrate every parallelism tier and serve as the final API dogfooding pass
 before the 1.0 freeze (step 4.5 gates on this phase). Examples live in
 `examples/`, run in CI, and each gets a worked docs page.
 
-- [ ] **5.1 Autonomous ride-hailing fleet — core model** — a robotaxi fleet
+- [x] **5.1 Autonomous ride-hailing fleet — core model** — a robotaxi fleet
   serving Poisson trip requests over city zones: vehicle processes (pickup,
   drive, drop-off, reposition, recharge), charging stations as
   `Resource`s, idle-fleet dispatch via `FilterStore`; pluggable dispatch
   policies (closest-available vs power-of-d, as studied in the EV ride-hailing
   DES literature); deterministic same-seed test and KPI collection (wait time,
   utilization, abandonment).
-- [ ] **5.2 Ride-hailing fleet — parallelism showcases** — (a) fleet-sizing
+- [x] **5.2 Ride-hailing fleet — parallelism showcases** — (a) fleet-sizing
   Monte Carlo study via `Experiment` (confidence intervals over fleet size ×
   demand configs; Phase 2 showcase); (b) zone-sharded `ShardedSim` variant
   using inter-zone travel time as channel lookahead, with trace-equivalence
   test against the sequential model (Phase 3 showcase); docs page with
   measured scaling curves.
-- [ ] **5.3 LLM agentic workflow — core model** — a multi-agent pipeline in
+- [x] **5.3 LLM agentic workflow — core model** — a multi-agent pipeline in
   the shape current LLM-scheduling research simulates: tasks arrive at an
   orchestrator; agent processes alternate *think* steps (inference requests
   queued at shared LLM-server `Resource`s with token-length-dependent service
   times and batching) and *act* steps (tool calls with stochastic latency,
   failures, retries); KPIs: end-to-end task latency, queue depth, cost per
   task; deterministic same-seed test.
-- [ ] **5.4 Agentic workflow — parallelism showcases** — (a) capacity-planning
+- [x] **5.4 Agentic workflow — parallelism showcases** — (a) capacity-planning
   sweep via `Experiment` (server count × batch size × agent concurrency);
   (b) `sim.offload` showcase: a CPU-heavy scoring/routing policy evaluated on
   the worker pool in strict mode, with trace-equivalence test (Phase 4
   showcase); docs page with measured curves.
-- [ ] **5.5 Example gallery integration** — `examples/` wired into CI on both
+- [x] **5.5 Example gallery integration** — `examples/` wired into CI on both
   builds (smoke-run with small parameters); gallery landing page linking each
   example to the parallelism decision tree; API-friction findings filed and
   resolved (or explicitly waived) before the 4.5 freeze review.
